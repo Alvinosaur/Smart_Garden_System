@@ -1,9 +1,21 @@
 from tkinter import *
-# import matplotlib
-# matplotlib.use("TkAgg")
-# from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-# from matplotlib.figure import Figure
-#from GeneratePseudoData import *
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+import os
+from PIL import ImageTk,Image 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+from GeneratePseudoData import *
+import serial
+ser = serial.Serial('/dev/tty.usbmodem14541', 9600)
+from PlantDetection import *
+from Statistics import *
+
+#/dev/tty.usbmodem14541 for mac
+#/dev/ttyACM0 or 1 for rpi
 
 def init(data):
     data.type = ""
@@ -16,22 +28,20 @@ def init(data):
     data.butLine = 3
     data.buttonH = 20
     data.imgSpan = 10
-    
+    data.gardenRows = data.gardenCols = 5
+    data.imageSide = data.width//data.gardenCols
     #Temporary
     data.rows = data.cols = 6
     data.gridSize = data.width - data.margin*2
     data.cellSize = data.gridSize/6
-    
+    data.options = ["Week","Next Two Weeks","Month"]
+    data.genDataButton = "Generate Data!"
     data.plantLocs = dict()#keys are plant coordinates, values are functions
     setPlantLocs(data)
+    data.timeMode = ""
     
 def setPlantLocs(data):
-    for i in range(data.rows):
-        for j in range(data.cols):
-            row = i*data.cellSize + 30
-            col = j*data.cellSize + data.margin
-            data.plantLocs[(row,col)]= "row,col"
-            data.plantLocs[(row+data.cellSize,col+data.cellSize)]= "row,col"
+    data.plantLocs.add(plant) for plant in data.getImage.foundPlants
 
 ####################################
 # mode dispatcher
@@ -44,17 +54,22 @@ def mousePressed(event, data):
     if (data.mode == "mainScreen"):   mainScreenMousePressed(event, data)
     elif (data.mode == "showGarden"):    showGardenMousePressed(event, data)
     elif (data.mode == "showStats"):       showStatsMousePressed(event, data)
+    elif (data.mode == "genRand"):           genRandMousePressed(event,data)
 
 def timerFired(data):
+    try:data.getImages.main()
+    except:pass
     if (data.mode == "startScreen"): startScreenTimerFired(data)
     elif (data.mode == "showGarden"):   showGardenTimerFired(data)
     elif (data.mode == "showStats"):       showStatsTimerFired(data)
+    elif (data.mode == "genRand"):           genRandTimerFired(data)
 
 def redrawAll(canvas, data):
     if (data.mode == "startScreen"): startScreenRedrawAll(canvas, data)
     elif (data.mode == "mainScreen"):   mainScreenRedrawAll(canvas, data)
-    elif (data.mode == "showGarden"):       showGardenRedrawAll(canvas, data)
-    elif (data.mode == "showStats"):       showStatsRedrawAll(canvas, data)
+    elif (data.mode == "showGarden"):     showGardenRedrawAll(canvas, data)
+    elif (data.mode == "showStats"):        showStatsRedrawAll(canvas, data)
+    elif (data.mode == "genRand"):            genRandRedrawAll(canvas,data)
 
 ####################################
 # startScreen mode
@@ -79,9 +94,10 @@ def startScreenRedrawAll(canvas, data):
 ####################################
 
 def showGardenMousePressed(event, data):
-    for (x,y) in data.plantLocs.keys():
+    for (x,y,area) in data.plantLocs:
         if (event.x-data.imgSpan <= x <= event.x+data.imgSpan) and \
             (event.y-data.imgSpan <= y <= event.y+data.imgSpan):
+            ser.write("(%d,%d)"%(x,y))
             data.mode="showStats"
             data.timerCalled = 0
             data.type = data.plantLocs[(x,y)]
@@ -99,13 +115,27 @@ def showGardenRedrawAll(canvas, data):
             canvas.create_rectangle(x0,y0,x1,y1)
     canvas.create_text(data.width/2, 0,
                        text="This is showGarden mode!",anchor=N, font="Arial 26 bold")
+    loadImages(data)                   
+def loadImages(data):
+    for row in range(data.gardenRows):
+        for col in range(data.gardenCols):
+            
+            load = Image.open("IMAGES"+os.sep+"(%d,%d).png"%(col,row))
+            rotatedImage = load.rotate(180)
+            image = rotatedImage.resize((data.imageSide,data.imageSide), Image.ANTIALIAS)
+            render = ImageTk.PhotoImage(image)
+            img = Label(image=render)
+            img.image = render
+            img.place(x=row*data.imageSide, y=col*data.imageSide)
                        
 ####################################
 # showStats mode
 ####################################
 
 def showStatsMousePressed(event, data):
-    pass
+    if (data.margin <= event.x <= data.width-data.margin) and \
+        (data.margin < event.y < data.margin+data.buttonH):
+        data.mode = "showGarden"
     
 def showStatsKeyPressed(event, data):
     if event.char == "q":
@@ -117,11 +147,37 @@ def showStatsTimerFired(data):
 
 def showStatsRedrawAll(canvas, data):
     if data.type != "":
-        #plt.plot(range(5),range(5))
-        canvas.create_text(data.width/2,data.height/2,text="Loser")
+        canvas.create_rectangle(data.margin,data.margin,data.width-data.margin,
+                data.margin+data.buttonH,fill="pink",width=data.butLine)
+        canvas.create_text(data.width//2,data.margin+data.buttonH/2,
+                text="See Current Status of Garden",font="Arial 20 bold")
+        plt.plot([1,2,3,4],[1,2,3,4])
+        plt.show()
     else:
         pass 
+     
+        
+####################################
+# genRand mode
+####################################
+def genRandMousePressed(event, data):
+    if event.char == "q":
+        data.mode = "mainScreen"
 
+def genRandTimerFired(data):
+    #show some weather animations
+    pass
+
+def genRandRedrawAll(canvas, data):
+    if data.timeMode == "Month": duration = 31
+    elif data.timeMode == "Week": duration = 8
+    test = GenData(duration)
+    test.plotData()
+        
+def visitGenData(data,label):
+    data.timeMode = label.get()
+    data.mode = "genRand"
+        
 ####################################
 # mainScreen mode
 ####################################
@@ -130,12 +186,24 @@ def mainScreenMousePressed(event, data):
     if (data.margin <= event.x <= data.width-data.margin) and \
             (data.margin < event.y < data.margin+data.buttonH):
         data.mode = "showGarden"
+    elif (data.margin <= event.x <= data.width-data.margin) and \
+        (data.margin+data.buttonH*2 < event.y < data.margin+data.buttonH*3):
+        data.mode="genRand"
+        data.timeMode = "Month"
 
 def mainScreenRedrawAll(canvas, data):
     canvas.create_rectangle(data.margin,data.margin,data.width-data.margin,
             data.margin+data.buttonH,fill="pink",width=data.butLine)
-    canvas.create_text(data.width//2,data.margin+data.buttonH/2,
+    canvas.create_text(data.width//2,data.margin+data.buttonH//2,
             text="See Current Status of Garden",font="Arial 20 bold")
+    canvas.create_rectangle(data.margin,data.margin+data.buttonH*2,data.width-             data.margin,data.margin+data.buttonH*3,fill="pink",width=data.butLine)
+    canvas.create_text(data.width//2,data.margin+data.buttonH*5/2,
+            text="See Predicted Growth",font="Arial 20 bold")
+    # label = StringVar(data.root)
+    # label.set(data.options[0])
+    # w = OptionMenu(data.root, label, *data.options)
+    # w.pack()
+    # selectButton = Button(data.root,text=data.genDataButton,command=visitGenData)
     #canvas.create_rectangle(data.margin,data.margin+data.buttonH,data.width-data.margin,data.margin+data.buttonH*2,fill="pink",width=data.butLine)
     
 
@@ -170,19 +238,21 @@ def run(width=300, height=300):
     data.width = width
     data.height = height
     data.timerDelay = 100 # milliseconds
-    root = Tk()
+    data.root = Tk()
+    data.root.title("Grow Mellon: Automated Gardening")
     init(data)
+    data.getImages = plantDetection()
     # create the root and the canvas
-    canvas = Canvas(root, width=data.width, height=data.height)
+    canvas = Canvas(data.root, width=data.width, height=data.height)
     canvas.pack()
     # set up events
-    root.bind("<Button-1>", lambda event:
+    data.root.bind("<Button-1>", lambda event:
                             mousePressedWrapper(event, canvas, data))
-    root.bind("<Key>", lambda event:
+    data.root.bind("<Key>", lambda event:
                             keyPressedWrapper(event, canvas, data))
     timerFiredWrapper(canvas, data)
     # and launch the app
-    root.mainloop()  # blocks until window is closed
+    data.root.mainloop()  # blocks until window is closed
     print("bye!")
 
-run(600, 600)
+run(500, 500)
