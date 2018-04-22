@@ -1,4 +1,5 @@
-import os    
+import os  
+import math  
 
 class analyzeData(object):
     path = "Plant_Data"
@@ -11,23 +12,31 @@ class analyzeData(object):
         self.valueTypes = ["Temp","Bright","Moist","Size"]
         self.numVals = len(self.valueTypes)
         self.medVals = []*self.numVals #self.medVals = [medTemp,medBright,medMoist,medSize]
-        self.optVals = []*(self.numVals-1) #not including size
+        self.numNeurons = self.numVals-1
+        self.optVals = []*(self.numNeurons) #not including size
         self.optTemp = self.optBright = self.optMoist = 0 
         self.midIndex = 0
-        
+        self.medDone = False
+        self.hiddenLayerNet = self.hiddenLayerOut = dict()
+        self.outputLayerNet = self.outputLayerOut = dict()
+        self.hiddenWeights = dict()
+        self.weights = [.5]*(self.numNeurons)
+        self.hiddenBias = .5
+        self.outerBias = .5
+        #not sure what weights to predefine
     
     def getData(self):
         filePath = analyzeData.path+os.sep+self.type #Plant_Data/Tomato
         for plant in os.listdir(filePath): #every plant instance
+            self.plantCount += 1
             plantFolder = filePath+os.sep+plant
             #read contents
             contents = analyzeData.readFile(plantFolder+os.sep+"Data.csv")
             #sort data, run calculations
             self.sortData(contents,plant)
             self.storeValueRates(plant)
-        self.calcCollectiveMed()
-        self.getOptimalVals()
-    
+            self.initializeNeuralNetwork(plant)
+        
     def getOptimalVals(self):
         optFolder = analyzeData.path+os.sep+self.type+"Optimal"
         if os.path.exists(optFolder):
@@ -39,7 +48,6 @@ class analyzeData(object):
             self.optTemp = self.medVals[0]
             self.optBright = self.medVals[1]
             self.optMoist = self.medVals[2]
-            
     
     def sortData(self,contents,plant):
         #store every sensor value into self.allSensorVals for collective median calc
@@ -59,6 +67,19 @@ class analyzeData(object):
                     self.allSensorVals[sensor] = [value]
                 #every plant has dict of sensors with datapoints in a list
                 self.indivPlantVals[plant][valueInc].append(value)
+        if not self.medDone:
+            self.calcCollectiveMed()
+            self.getOptimalVals()
+            self.intializeNeuralNetwork()
+            self.medDone = True
+                
+    def initializeNeuralNetwork(plant):
+        self.hiddenLayerNet[plant]= []*(self.numNeurons)+[[self.hiddenBias]]
+        self.hiddenLayerOut[plant]= []*(self.numNeurons)+[[0]]
+        self.outputLayerNet[plant]= self.outerBias
+        self.outputLayerOut[plant]= 0
+        self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numVals-1)]
+        self.outputWeights[plant] = [.5]*self.numNeurons
                 
     def calcCollectiveMed(self):#calculate collective median for each sensor
         for sensorInc in range(self.numVals):
@@ -67,6 +88,7 @@ class analyzeData(object):
             self.allSensorVals[sensor].sort()
             medVal = self.calcMedian(self.allSensorVals[sensor])
             self.medVals[sensorInc] = medVal
+            
             
     # def compareEachSensor(self):
     #     for sensorInc in range(self.numVals):
@@ -91,11 +113,15 @@ class analyzeData(object):
             medVal = self.calcMedian(self.indivPlantVals[plant][sensorInc])
             #compare individual and collective median
             difference = medVal-self.medVals[sensorInc]
-            if difference >= 0: 
-            #get % difference for weighing
-                self.higherVals[plant]=abs(difference)/self.medVals[sensorInc]
-            else: 
-                self.lowerVals[plant] = abs(difference)/self.medVals[sensorInc]
+            self.calcHiddenNet(difference,sensorInc,plant)
+            self.calcHiddenOut(self)
+            
+            
+            # if difference >= 0: 
+            # #get % difference for weighing
+            #     self.higherVals[plant]=abs(difference)/self.medVals[sensorInc]
+            # else: 
+            #     self.lowerVals[plant] = abs(difference)/self.medVals[sensorInc]
             
     def calcGrowthStats(self,group):
         sumGrowthRates = 0
@@ -139,6 +165,7 @@ class analyzeData(object):
             lowerOutliers = [x for x in allData if (x < mean-2*stdDev)]
             highOutliers = [x for x in allData if (x > mean+2*stdDev)]
             allOutliers = lowerOutliers + highOutliers
+            
             for outlier in allOutliers:
                 index = self.valueChanges[plant][sensorInc].index(outlier)
                 growthRate = self.valueChanges[plant][3][index]
@@ -147,7 +174,41 @@ class analyzeData(object):
                 diffSensor = outlier - self.medVals[sensorInc]
                 #update optimal value by weighted difference in sensor value
                 self.optVals[sensorInc] += diffSensor*diffGrowth
-                 
+                
+                
+    #class NeuralNetwork(object):
+
+    def calcHiddenNet(self,input,sensorInc,plant):
+        for neuronInc in range(self.numNeurons):
+            weight = self.hiddenWeights[plant][sensorInc][neuronInc]
+            #1/20 plants??
+            netInput = weight*(1/self.plantCount)*input
+            self.hiddenLayerNet[plant][neuronInc]=netInput
+        
+    def calcHiddenOut(self,plant):
+        for neuronInc in range(self.numNeurons):
+            net = sum(self.hiddenLayerNet[plant][neuronInc]
+            self.hiddenLayerOut[plant][neuronInc]=activeFunc(self,net)
+            
+    def calcOuterNet(self,input,plant,neuronInc):
+        weight = self.outputWeights[neuronInc]
+        netInput = weight*(1/self.plantCount)*input
+        self.outerLayerNet[plant]+=netInput
+        
+    def calcOuterOut(self,plant):
+        net = self.outerLayerNet[plant]
+        self.outerLayerOut[plant]=activeFunc(net)*50 #*50 ????
+    
+    def calcError(self,plant):
+        endSize = self.indivPlantVals[plant][3][-1]
+        error = .5(endSize-self.outerLayerOut[plant])**2
+    
+    def activeFunc(self,net): #Change this, not sure which to pick
+        neuronOutput = 1/(1+math.e**(-net))
+        return neuronOutput
+                
+            
+    
     @staticmethod
     def readFile(path):
         with open(path, "rt") as f:
