@@ -9,9 +9,9 @@ from PIL import ImageTk,Image
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 from GeneratePseudoData import *
-import serial
-ser = serial.Serial('/dev/tty.usbmodem14541', 9600)
-from PlantDetection import *
+# import serial
+# ser = serial.Serial('/dev/tty.usbmodem14541', 9600)
+#from PlantDetection import *
 from Statistics import *
 
 #/dev/tty.usbmodem14541 for mac
@@ -39,9 +39,14 @@ def init(data):
     data.plantLocs = dict()#keys are plant coordinates, values are functions
     setPlantLocs(data)
     data.timeMode = ""
+    data.getImages = plantDetection()
+    data.stats = Stats("Basil")
+    data.lineWidth = 4
+    data.ticHeight = 8
+    data.startInc = data.stats.valueTypes.index("Temp")
     
-def setPlantLocs(data):
-    data.plantLocs.add(plant) for plant in data.getImage.foundPlants
+# def setPlantLocs(data):
+#     data.plantLocs.add(plant) for plant in data.getImage.foundPlants
 
 ####################################
 # mode dispatcher
@@ -86,7 +91,7 @@ def startScreenRedrawAll(canvas, data):
     canvas.create_text(data.width/2, data.height/2-data.height/4,
                        text="Grow Mellon", font="Arial 26 bold")
     canvas.create_text(data.width/2, data.height/2,
-                       text="Educating Gardeners for More Sustainable Agriculture", font="Arial 15",fill="grey")
+                       text="Educating Gardeners for More Sustainable Agriculture", font="Arial 15 bold",fill="grey")
     
 
 ####################################
@@ -115,18 +120,7 @@ def showGardenRedrawAll(canvas, data):
             canvas.create_rectangle(x0,y0,x1,y1)
     canvas.create_text(data.width/2, 0,
                        text="This is showGarden mode!",anchor=N, font="Arial 26 bold")
-    loadImages(data)                   
-def loadImages(data):
-    for row in range(data.gardenRows):
-        for col in range(data.gardenCols):
-            
-            load = Image.open("IMAGES"+os.sep+"(%d,%d).png"%(col,row))
-            rotatedImage = load.rotate(180)
-            image = rotatedImage.resize((data.imageSide,data.imageSide), Image.ANTIALIAS)
-            render = ImageTk.PhotoImage(image)
-            img = Label(image=render)
-            img.image = render
-            img.place(x=row*data.imageSide, y=col*data.imageSide)
+    loadImages(data)            
                        
 ####################################
 # showStats mode
@@ -192,13 +186,10 @@ def mainScreenMousePressed(event, data):
         data.timeMode = "Month"
 
 def mainScreenRedrawAll(canvas, data):
-    canvas.create_rectangle(data.margin,data.margin,data.width-data.margin,
-            data.margin+data.buttonH,fill="pink",width=data.butLine)
-    canvas.create_text(data.width//2,data.margin+data.buttonH//2,
-            text="See Current Status of Garden",font="Arial 20 bold")
-    canvas.create_rectangle(data.margin,data.margin+data.buttonH*2,data.width-             data.margin,data.margin+data.buttonH*3,fill="pink",width=data.butLine)
-    canvas.create_text(data.width//2,data.margin+data.buttonH*5/2,
-            text="See Predicted Growth",font="Arial 20 bold")
+    createButton(canvas,data,data.width//2,data.margin+data.buttonH//2,
+                data.width*3//4,data.buttonH,"pink","See Current Status of Garden")
+    createButton(canvas,data,data.width//2,data.margin+data.buttonH*5/2,
+                data.width*3//4,data.buttonH,"pink","See Predicted Growth")       
     # label = StringVar(data.root)
     # label.set(data.options[0])
     # w = OptionMenu(data.root, label, *data.options)
@@ -206,6 +197,51 @@ def mainScreenRedrawAll(canvas, data):
     # selectButton = Button(data.root,text=data.genDataButton,command=visitGenData)
     #canvas.create_rectangle(data.margin,data.margin+data.buttonH,data.width-data.margin,data.margin+data.buttonH*2,fill="pink",width=data.butLine)
     
+####################################
+# Core Functionality
+####################################  
+def createButton(canvas,data,cx,cy,width,height,color,text,font="Arial 20 bold"):
+    x0 = cx-width/2+data.margin
+    y0 = cy-height/2+data.margin
+    x1 = cx+width/2+data.margin
+    y1 = cy+height/2+data.margin
+    canvas.create_rectangle(x0,y0,x1,y1,fill=color,width=data.butLine)
+    canvas.create_text(cx,cy,text=text,font=font)
+    
+def loadImages(data):
+    for row in range(data.gardenRows):
+        for col in range(data.gardenCols):
+            
+            load = Image.open("IMAGES"+os.sep+"(%d,%d).png"%(col,row))
+            rotatedImage = load.rotate(180)
+            image = rotatedImage.resize((data.imageSide,data.imageSide), Image.ANTIALIAS)
+            render = ImageTk.PhotoImage(image)
+            img = Label(image=render)
+            img.image = render
+            img.place(x=row*data.imageSide, y=col*data.imageSide)
+            
+def drawScatterGraph(canvas,data,x0,y0,length,height,values):
+    medianGrowth=data.stats.medVals[-1]
+    medianY = y0+height-medianGrowth
+    canvas.create_line(x0,y0,x0,y0+height,width=data.lineWidth)
+    canvas.create_line(x0,y0+height,x0+length,y0+height,width=data.lineWidth)
+    canvas.create_line(x0,medianY,x0+length,medianY)
+    
+    
+def drawScatterFeats(canvas,data,x0,y0,values,medianY):
+    numTics = len(values)
+    distTics = length/(numTicks-1)
+    for inc in range(len(values)):
+        label = values[inc] #Temp, Bright, Moist
+        x = x0+distTics*(inc+1)
+        topTic = y0+height-data.ticHeight/2
+        botTic = y0+height+data.ticHeight/2
+        canvas.create_line(x,topTic,x,botTic)
+        canvas.create_text(x,botTic,text=label,anchor=N)
+        lowY = data.stats.groupedPlants[inc+data.startInc]["High"] = (len(higherVals),avgDiffHigh)
+        canvas.create_oval(x,medianY
+    
+        
 
 ####################################
 # use the run function as-is
@@ -241,7 +277,6 @@ def run(width=300, height=300):
     data.root = Tk()
     data.root.title("Grow Mellon: Automated Gardening")
     init(data)
-    data.getImages = plantDetection()
     # create the root and the canvas
     canvas = Canvas(data.root, width=data.width, height=data.height)
     canvas.pack()
@@ -254,5 +289,10 @@ def run(width=300, height=300):
     # and launch the app
     data.root.mainloop()  # blocks until window is closed
     print("bye!")
-
-run(500, 500)
+    
+def onclick(event):
+    print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+          ('double' if event.dblclick else 'single', event.button,
+           event.x, event.y, event.xdata, event.ydata))
+    
+run(1000, 1000)

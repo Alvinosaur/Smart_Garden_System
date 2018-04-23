@@ -1,213 +1,165 @@
 import os  
 import math  
 
-class analyzeData(object):
+class Stats(object):
     path = "Plant_Data"
+    LEARNING_RATE = 0.5
     def __init__(self,type):
-        self.type = type #call for every species, ex: tomato
-        self.allTimes = [] 
-        self.indivPlantVals = dict() #stores specific sensor values for each plant
+        self.type = type #call for every species, ex: Basil
+        self.indivPlantVals = dict() #stores specific values for each plant
         self.allSensorVals = dict() #stores all sensor values
         self.valueChanges = dict() #stores rate of change of all values
-        self.valueTypes = ["Temp","Bright","Moist","Size"]
+        self.groupedPlants = dict()
+        self.valueTypes = ["x","y","Day","Temp","Bright","Moist","Size"]
         self.numVals = len(self.valueTypes)
-        self.medVals = []*self.numVals #self.medVals = [medTemp,medBright,medMoist,medSize]
-        self.numNeurons = self.numVals-1
-        self.optVals = []*(self.numNeurons) #not including size
-        self.optTemp = self.optBright = self.optMoist = 0 
-        self.midIndex = 0
-        self.medDone = False
-        self.hiddenLayerNet = self.hiddenLayerOut = dict()
-        self.outputLayerNet = self.outputLayerOut = dict()
-        self.hiddenWeights = dict()
-        self.weights = [.5]*(self.numNeurons)
-        self.hiddenBias = .5
-        self.outerBias = .5
-        #not sure what weights to predefine
+        self.medVals = [0]*self.numVals #[day,medTemp,medBright,medMoist,medSize]
+        self.optTemp = self.optBright = self.optMoist = 0  
     
     def getData(self):
-        filePath = analyzeData.path+os.sep+self.type #Plant_Data/Tomato
+        filePath = Stats.path+os.sep+self.type #Plant_Data/Basil
         for plant in os.listdir(filePath): #every plant instance
-            self.plantCount += 1
+            if plant.startswith('.'): continue #ignore .DS_Store
             plantFolder = filePath+os.sep+plant
-            #read contents
-            contents = analyzeData.readFile(plantFolder+os.sep+"Data.csv")
-            #sort data, run calculations
+            contents = Stats.readFile(plantFolder+os.sep+"Data.csv")#read contents
+            #sort data, calculate rates of change
             self.sortData(contents,plant)
             self.storeValueRates(plant)
-            self.initializeNeuralNetwork(plant)
-        
-    def getOptimalVals(self):
-        optFolder = analyzeData.path+os.sep+self.type+"Optimal"
-        if os.path.exists(optFolder):
-            values = analyzeData.readFile(optFolder+os.sep+"optValues.txt")
-            self.optTemp, self.optBright, self.optMoist = values.split(",")
-            self.optVals  = float(self.optTemp),float(self.optBright),float(self.optMoist)
-        else:
-            os.path.makedirs(optFolder+os.sep+"optValues.txt")
-            self.optTemp = self.medVals[0]
-            self.optBright = self.medVals[1]
-            self.optMoist = self.medVals[2]
-    
+            
     def sortData(self,contents,plant):
         #store every sensor value into self.allSensorVals for collective median calc
         #store each plant instance's sensor values into self.indivPlantVals
-        self.indivPlantVals[plant] = [[] for type in range(self.numVals)]
-        lines = contents.split(";")
+        self.indivPlantVals[plant] = [[0] for type in range(self.numVals)]
+        lines = contents.split(";") #sorts data from csv file
+        lines = lines[:-1]
         for line in lines:
             sepVals = line.split(",")
-            #x,y missing
-            #day,temp,light,moist,size = sepVals
-            for valueInc in range(self.valueTypes):
-                sensor = self.valueTypes[valueInc]
-                value = sepVals[valueInc+1] #don't include day
-                if self.allSensorVals.get(sensor,0) != 0: #if not empty
-                    self.allSensorVals[sensor].append(value)
+            #x,y,day,temp,light,moist,size = sepVals
+            for valueInc in range(len(sepVals)):
+                infoType = self.valueTypes[valueInc] #name of info
+                value = float(sepVals[valueInc])
+                if self.allSensorVals.get(infoType,0) != 0: #if not empty
+                    self.allSensorVals[infoType].append(value)
                 else:
                     self.allSensorVals[sensor] = [value]
                 #every plant has dict of sensors with datapoints in a list
                 self.indivPlantVals[plant][valueInc].append(value)
-        if not self.medDone:
-            self.calcCollectiveMed()
-            self.getOptimalVals()
-            self.intializeNeuralNetwork()
-            self.medDone = True
                 
-    def initializeNeuralNetwork(plant):
-        self.hiddenLayerNet[plant]= []*(self.numNeurons)+[[self.hiddenBias]]
-        self.hiddenLayerOut[plant]= []*(self.numNeurons)+[[0]]
-        self.outputLayerNet[plant]= self.outerBias
-        self.outputLayerOut[plant]= 0
-        self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numVals-1)]
-        self.outputWeights[plant] = [.5]*self.numNeurons
+    def storeValueRates(self,plant):
+        #stores rate of change of all sensor values, including size
+        self.valueChanges[plant] = [[] for type in range(self.numVals)]
+        for sensorInc in range(self.numVals):
+            allVals = self.indivPlantVals[plant][sensorInc] #grab data values
+            for valInc in range(1,len(allVals)): 
+                changePerDay = float(allVals[valInc])-float(allVals[valInc-1])
+                self.valueChanges[plant][sensorInc].append(changePerDay)
+                #includes change in day, just ignore this
                 
     def calcCollectiveMed(self):#calculate collective median for each sensor
         for sensorInc in range(self.numVals):
             sensor = self.valueTypes[sensorInc]
             #sort list of each sensor to calculate median
-            self.allSensorVals[sensor].sort()
-            medVal = self.calcMedian(self.allSensorVals[sensor])
+            medVal = Stats.calcMedian(self.allSensorVals[sensor])
             self.medVals[sensorInc] = medVal
             
-            
-    # def compareEachSensor(self):
-    #     for sensorInc in range(self.numVals):
-    #         self.compareEachPlant(sensorInc) #gets 
-    #         highGrowthTot = lowGrowthTot= 0
-    #         count = 0
-    #         weightedHighAvg,weightedHighTot = self.calcGrowthStats(self.higherVals)
-    #         weightedLowAvg,weightedLowTot = self.calcGrowthStats(self.lowerVals)
-    #         
-    #         if highGrowthAvg > lowGrowthAvg:
-    #             self.results[self.valueTypes[sensorInc]] = "Higher"
-    #         else:
-    #             self.results[self.valueTypes[sensorInc]] = "Lower"
-#     HOW TO BEST ANALYZE THIS DATA??????
-                
+    def compareEachSensor(self):
+        for sensorInc in range(3,self.numVals):
+            #won't contain the first three values: x,y,day
+            self.groupedPlants[sensorInc] = dict()
+            #sort plants into two groups of sensor values below and above median
+            lowerVals, higherVals = self.compareEachPlant(sensorInc)
+            avgDiffHigh,avgGrowthRateHigh = self.calcGrowthStats(higherVals)
+            avgDiffLow,avgGrowthRateLow = self.calcGrowthStats(lowerVals)
+            self.groupedPlants[sensorInc]["High"] = (len(higherVals),avgDiffHigh)
+            self.groupedPlants[sensorInc]["Low"] = (len(lowerVals),avgDiffLow)
+            if avgGrowthRateHigh > avgGrowthRateLow:
+                self.groupedPlants[sensorInc]["Result"] = "High"
+            else:
+                self.groupedPlants[sensorInc]["Result"] = "Low"
+    #HOW TO BEST ANALYZE THIS DATA??????
+
     def compareEachPlant(self,sensorInc):
-        #compare every med sensor value for every plant 
+        #compare every median sensor value for every plant with collective median
         #higherVals and lowerVals constantly reset for each sensor
-        self.higherVals = dict()
-        self.lowerVals = dict()
+        higherVals = dict() #contain plants with sensor value higher than median
+        lowerVals = dict()
         for plant in self.indivPlantVals:
-            medVal = self.calcMedian(self.indivPlantVals[plant][sensorInc])
+            medVal = Stats.calcMedian(self.indivPlantVals[plant][sensorInc])
             #compare individual and collective median
             difference = medVal-self.medVals[sensorInc]
-            self.calcHiddenNet(difference,sensorInc,plant)
-            self.calcHiddenOut(self)
-            
-            
-            # if difference >= 0: 
-            # #get % difference for weighing
-            #     self.higherVals[plant]=abs(difference)/self.medVals[sensorInc]
-            # else: 
-            #     self.lowerVals[plant] = abs(difference)/self.medVals[sensorInc]
-            
+            weight = abs(difference)/self.medVals[sensorInc]
+            if difference >= 0:
+            #get % difference for weighing
+                higherVals[plant]= difference*weight
+            else: 
+                lowerVals[plant] = difference*weight
+        return lowerVals,higherVals
+
     def calcGrowthStats(self,group):
-        sumGrowthRates = 0
+        #calc avg diff sensor value and growth rate for every plant in group
         growthTotal = 0
+        avgDiff = 0
+        count = 0
         for plant in group:
-            #calc avg growth rate, all weighted, so not accurate numbers
-            growthVals = self.valueChanges[plant][3]
-            growthMed = self.calcMedian(growthVals)
-            sumGrowthRates += growthMed*group[plant]
+            growthVals = self.valueChanges[plant][-1]
+            growthMed = Stats.calcMedian(growthVals)
+            sumGrowthRates += growthMed
+            avgDiff += group[plant]
             startGrowth = growthVals[0]
             endGrowth = growthVals[-1]
-            weightedGrowthTotal += (endGrowth - startGrowth)*group[plant] #multiply with weight
-            count+= 1
-        weightedGrowthRateAvg = sumGrowthRates/count #not real growth rate average, weighted version
-        return (weightedGrowthRateAvg,weightedGrowthTotal)
-    
-    def calcMedian(self,curList):
-        self.midIndex = len(curList)//2
-        if len(curList)%2 == 0:
-            #take average of two middle values
-            medVal = (curList[midIndex]+curList[midIndex-1])/2
+            growthTotal += (endGrowth - startGrowth)
+            count+=1
+        return avgDiff/count,growthTotal/count
+                
+    def getOptimalVals(self):
+        #grabs previously stored values if they exist
+        #if they don't, just set them to the median and store
+        optFolder = Stats.path+os.sep+self.type+"Optimal"
+        optFile = optFolder+os.sep+"optValues.txt"
+        if os.path.exists(optFolder):
+            if os.path.exists(optFile):
+                values = Stats.readFile(optFile)
+                self.optTemp, self.optBright, self.optMoist = values.split(",")
+                self.optVals  = float(self.optTemp),float(self.optBright),float(self.optMoist)
+            else:
+                self.storeOptValue(optFile)
+                self.getOptimalVals()
         else:
-            medVal = curList[midIndex]
-        return medVal
+            os.path.makedirs(optFolder)
+            self.storeOptValue(optFile)
+            self.getOptimalVals()
+            
+    def generateOptString(self):
+        #convert optimal values into a string csv format
+        values =""
+        for inc in range(self.numVals-1):
+            values += str(self.medVals[inc])
+            values += ","
+        return values[:-1]
         
-    def storeValueRates(self,plant):
-        #stores rate of change of all sensor values, including size
-        self.valueChanges[plant] = [[] for type in range(self.numVals)]
-        for sensorInc in range(len(self.numVals)):
-            allVals = self.indivPlantVals[plant][sensorInc] #grab sensor values
-            for valInc in range(1,len(allVals)): 
-                changePerDay = allVals[valInc]-allVals[valInc-1]
-                self.valueChanges[plant][sensorInc].append(changePerDay)
+    def storeOptValue(self,file):
+        with open(file, "wt") as f:
+            values = self.generateOptString()
+            f.write(values)  
             
     def findAnomalies(self,plant):
         #find anomalies in sensor data, look at growth at each instance
-        for sensorInc in range(len(self.numVals)-1): #don't include growth rate
+        self.storeValueRates(plant)
+        for sensorInc in range(self.numVals-1): #don't include growth rate
             allData = self.valueChanges[plant][sensorInc]
-            mean = analyzeData.calcMean(allData)
-            stdDev = analyzeData.calcStdDev(allData,mean)
+            mean = Stats.calcMean(allData)
+            stdDev = Stats.calcStdDev(allData,mean)
             lowerOutliers = [x for x in allData if (x < mean-2*stdDev)]
             highOutliers = [x for x in allData if (x > mean+2*stdDev)]
             allOutliers = lowerOutliers + highOutliers
             
             for outlier in allOutliers:
                 index = self.valueChanges[plant][sensorInc].index(outlier)
-                growthRate = self.valueChanges[plant][3][index]
+                growthRate = self.valueChanges[plant][-1][index]
                 #diffGrowth is percent change in growth rate 
-                diffGrowth = (growthRate-self.medVals[3])/(self.medVals[3])
+                diffGrowth = (growthRate-self.medVals[-1])/(self.medVals[-1])
                 diffSensor = outlier - self.medVals[sensorInc]
                 #update optimal value by weighted difference in sensor value
                 self.optVals[sensorInc] += diffSensor*diffGrowth
-                
-                
-    #class NeuralNetwork(object):
-
-    def calcHiddenNet(self,input,sensorInc,plant):
-        for neuronInc in range(self.numNeurons):
-            weight = self.hiddenWeights[plant][sensorInc][neuronInc]
-            #1/20 plants??
-            netInput = weight*(1/self.plantCount)*input
-            self.hiddenLayerNet[plant][neuronInc]=netInput
-        
-    def calcHiddenOut(self,plant):
-        for neuronInc in range(self.numNeurons):
-            net = sum(self.hiddenLayerNet[plant][neuronInc]
-            self.hiddenLayerOut[plant][neuronInc]=activeFunc(self,net)
-            
-    def calcOuterNet(self,input,plant,neuronInc):
-        weight = self.outputWeights[neuronInc]
-        netInput = weight*(1/self.plantCount)*input
-        self.outerLayerNet[plant]+=netInput
-        
-    def calcOuterOut(self,plant):
-        net = self.outerLayerNet[plant]
-        self.outerLayerOut[plant]=activeFunc(net)*50 #*50 ????
-    
-    def calcError(self,plant):
-        endSize = self.indivPlantVals[plant][3][-1]
-        error = .5(endSize-self.outerLayerOut[plant])**2
-    
-    def activeFunc(self,net): #Change this, not sure which to pick
-        neuronOutput = 1/(1+math.e**(-net))
-        return neuronOutput
-                
-            
     
     @staticmethod
     def readFile(path):
@@ -217,8 +169,97 @@ class analyzeData(object):
         return sum(numList)/len(numList)
         
     def calcStdDev(numList,mean):
-        variance = sum([[value - mean]**2 for value in numList])
-        return variance**0.5
+        variance = []
+        for value in numList:
+            variance.append((value-mean)**2)
+        return sum(variance)**0.5
+        
+    def calcMedian(sorted(curList)): #takes in sorted list, doesn't modify original
+        midIndex = len(curList)//2
+        if len(curList)%2 == 0:
+            #take average of two middle values
+            medVal = (curList[midIndex]+curList[midIndex-1])/2
+        else:
+            medVal = curList[midIndex]
+        return medVal
+
+# class neuralNetwork(object):
+#     def __init__(self,):
+#         self.hiddenLayerNet = self.hiddenLayerOut = dict()
+#         self.outputLayerNet = self.outputLayerOut = dict()
+#         self.hiddenWeights = self.outputWeights = dict()
+#         self.weights = [.5]*(self.numNeurons)
+#         self.hiddenBias = .5
+#         self.outerBias = .5
+#         #not sure what weights to predefine
+#         self.numNeurons = self.numVals-1
+#         self.optVals = [0]*(self.numNeurons) #not including size
+#         
+#     def initializeNeuralNetwork(self,plant):
+#         self.hiddenLayerNet[plant]= [0]*(self.numNeurons)+[self.hiddenBias]
+#         self.hiddenLayerOut[plant]= [0]*(self.numNeurons)
+#         self.outputLayerNet[plant]= self.outerBias
+#         self.outputLayerOut[plant]= 0
+#         self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numVals)]
+#         self.outputWeights[plant] = [.5]*self.numNeurons
+#         
+#     def calcHiddenNet(self,input,sensorInc,plant):
+#         self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numVals)]
+#         plantCount = len(self.indivPlantVals)
+#         for neuronInc in range(self.numNeurons):
+#             weightList = self.hiddenWeights[plant][sensorInc]
+#             #1/20 plants??'
+#             weight = self.hiddenWeights[plant][sensorInc][neuronInc]
+#             netInput = weight*(1/plantCount)*input
+#             self.hiddenLayerNet[plant][neuronInc]=netInput
+#         
+#     def calcHiddenOut(self,plant):
+#         net = self.hiddenLayerNet[plant][0] 
+#         for neuronInc in range(self.numNeurons):
+#             self.hiddenLayerOut[plant][neuronInc]=self.activeFunc(net)
+#             
+#     def calcOuterNet(self,input,plant,neuronInc):
+#         weight = self.outputWeights[neuronInc]
+#         netInput = weight*(1/self.plantCount)*input
+#         self.outerLayerNet[plant]+=netInput
+#         
+#     def calcOuterOut(self,plant):
+#         net = self.outerLayerNet[plant]
+#         self.outerLayerOut[plant]=activeFunc(net)*50 #*50 ????
+#         
+#     def backProp(self,sensorInc,plant):
+#         for weightIndex in range(len(self.hiddenWeights[plant][sensorInc])):
+#             updateWeight(self,plant,weightIndex)
+#     
+#     
+#     def updateWeight(self,plant,weightIndex,sensorInc):
+#         target = self.indivPlantVals[plant][3][-1]
+#         output = self.outerLayerOut[plant]
+#         error = .5(target-output)**2
+#         errorWrtOuterOut = -(target-output)
+#         outerOutWrtOuterNet = output(1-output)
+#         outerNetWrtWeight = self.hiddenLayerOut[plant][weightIndex]
+#         errorWrtWeight = errorWrtOuterOut*outerOutWrtOuterNet*outerNetWrtWeight
+#         self.hiddenWeights[plant][sensorInc][weightIndex] -= \
+#                         Stats.LEARNING_RATE*errorWrtWeight
+    #def update optimal
+    
+    def activeFunc(self,net): #Change this, not sure which to pick
+        neuronOutput = 1/(1+math.e**(-net))
+        return neuronOutput
+
+def main():
+    test = Stats("Basil")
+    test.getData()
+    test.calcCollectiveMed()
+    test.compareEachSensor()
+    test.getOptimalVals()
+    test.findAnomalies()
+    
+main()
+
+
+
     # def 
     #     lines = contents.split("\n")
     #     dailyVals = dict()
@@ -238,11 +279,3 @@ class analyzeData(object):
     #                 getData(self,subPath,plant,species)
     #             self.plantVals[plant]=dailyVals
     #         self.speciesVals[species]=self.plantVals[plant]
-                
-def main():
-    test = analyzeData("Basil")
-    test.getData()
-    test.compareEachSensor()
-    test.findAnomalies()
-    
-#main()

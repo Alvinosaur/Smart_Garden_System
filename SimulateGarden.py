@@ -1,6 +1,7 @@
 # Mode Demo
 from tkinter import *
-
+from PIL import Image
+#https://stackoverflow.com/questions/765736/using-pil-to-make-all-white-pixels-transparent
 ####################################
 # init
 ####################################
@@ -14,6 +15,38 @@ def init(data):
     data.cellSize = (data.width-data.margin*2)//data.rows
     initColors(data)
     initCoreObjects(data)
+    data.plantFolder = "plantImages"
+    data.allPlants = dict()    
+    data.plantSpecies = ["strawberry","pumpkin","corn","broccoli"]
+    data.plantImages = dict()
+    
+def initImages(data):
+    for plant in data.plantSpecies:
+        data.allPlants[plant]
+        img = Image.open(data.plantFolder+os.sep+"%s.png"%plant)
+        img = img.convert("RGBA")
+        pixelData = img.getdata()
+        newData = []
+        for color in pixelData:
+            if color[0]==color[1]==color[2]==255:#get rid of white background
+                newData.append((255, 255, 255, 0))
+            else:
+                newData.append(item)
+        img.putdata(newdata)
+        data.plantImages[plant]=img
+        
+def sickeningLeaf(data,):
+    #do the same as the above except increase yellow
+    pass
+                
+                
+def dragAndDrop(data):
+    #instead of actual drag(pain), just have user click on image, then
+    #there is some status update for current image selected
+    #then any event.x and event.y for mousepressed, just create image there
+    pass
+#do something with floodfill for image processing, like adding bugs to leaves
+    
     
 
 def initCoreObjects(data):

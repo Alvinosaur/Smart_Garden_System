@@ -25,7 +25,7 @@ class GenData(tk.Frame):
         self.medTemp = 60 #degrees Fahrenheit
         self.startBright = 70 #lumens?
         self.startMoist = 50
-        self.fluct=3                                                                       
+        self.fluct=3
         self.graphLegend = 1, 0.5 #proportion of page where legend begins
 
     def synthData(self):
@@ -104,7 +104,8 @@ class GenData(tk.Frame):
             light = self.allBrights[day]
             moist = self.allMoists[day]
             size = self.plantSizes[day]
-            line = "%d,%.1f,%.1f,%.1f,%.1f;"%(day,temp,light,moist,size)
+            x,y = random.randint(0,55),random.randint(0,55) #centimeters
+            line = "%d,%d,%d,%.1f,%.1f,%.1f,%.1f;"%(x,y,day,temp,light,moist,size)
             allLines += line
         filePath = "Plant_Data"+os.sep+species+os.sep+name
         #Folder = Plant_Data/Tomato/Tomato1/month
@@ -131,5 +132,6 @@ class GenData(tk.Frame):
         if type == "low": return -result
         else: return result
 
-# test = GenData(31)
+test = GenData(31)
+test.main()
 # test.plotData()

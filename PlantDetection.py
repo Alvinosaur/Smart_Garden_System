@@ -11,7 +11,7 @@ import numpy as np
 import cv2
 import serial
 import math
-ser = serial.Serial('/dev/tty.usbmodem14541', 9600)
+#ser = serial.Serial('/dev/tty.usbmodem14541', 9600)
 
 class plantDetection(object):
     def __init__(self):
