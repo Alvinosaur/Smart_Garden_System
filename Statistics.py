@@ -241,16 +241,29 @@ class neuralNetwork(object):
         self.outputLayerOut[plant]= 0
         self.errors = []
     def initializeWeights(self):
+        allOutWeights = [0]*self.numNeurons
+        allHidWeights = [[0]*self.numNeurons for i in range(self.numNeurons)]
         filePath = "Plant_Data"+os.sep+self.species+"Optimal"+os.sep+"Weights.txt"
         if os.path.exists(filePath):
             contents = Stats.readFile(filePath)
             weightList = contents.split(";")
-            for weightString in weightList:
-                values = weightString.split(",")
-                
-        for plant in self.indivPlantVals:
-            self.outputWeights[plant] = [.5]*self.numNeurons
-            self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numNeurons)]
+            #outerLayer weights
+            weightStringOut= weightList[0]
+            values = weightStringOut.split(",")
+            for inc in range(len(values)):
+                allOutWeights[inc] = float(values[inc])
+            #hidden layer weights
+            weightStringHid = weightList[1][:-1]
+            values = weightStringHid.split(",")
+            for inc in range(len(values)):
+                allHidWeights[inc//self.numNeurons][inc%self.numNeurons] = float(values[inc])
+            for plant in self.indivPlantVals:
+                self.outputWeights[plant] = allOutWeights
+                self.hiddenWeights[plant] = allHidWeights
+        else:
+            for plant in self.indivPlantVals:
+                self.outputWeights[plant] = [.5]*self.numNeurons
+                self.hiddenWeights[plant] = [[.5]*self.numNeurons for i in range(self.numNeurons)]
         
     def initializeNewWeights(self,plant):
         self.newOutputWeights[plant] = [] #need to append new weights
@@ -319,6 +332,7 @@ class neuralNetwork(object):
             #new target is change in plant growth for that day based on that day's factors
             output = self.outputLayerOut[plant]*self.changeFactor 
         error = .5*(target-output)**2 #not needed, only to see results
+        
         self.errors.append(error)
         errorWrtOuterOut = -(target-output)
         
@@ -328,7 +342,6 @@ class neuralNetwork(object):
         newWeight = self.outputWeights[plant][neuronInc]-\
                             (neuralNetwork.LEARNING_RATE*errorWrtWeight)
         self.newOutputWeights[plant].append(newWeight)
-        print(self.newOutputWeights[plant])
         return errorWrtOuterOut,outerOutWrtOuterNet
     
     def updateHiddenWeights(self,type,plant,neuronInc,sensorInc,
@@ -356,9 +369,26 @@ class neuralNetwork(object):
         self.hiddenWeights[plant] = self.newHiddenWeights[plant]
         self.outputWeights[plant] = self.newOutputWeights[plant]
         
-    def storeWeights(self,plant):
-        species = plant[:-1] #species + number of instance
-        filePath = "Plant_Data"+os.sep+species+"Optimal"
+    def getAverageWeights(self):
+        plantCount = 0
+        allHiddenWeights = [[0]*self.numNeurons for i in range(self.numNeurons)]
+        allOutWeights = [0]*self.numNeurons
+        for plant in self.indivPlantVals:
+            plantCount += 1 #used to calculate average of all the weights
+            for neuronInc in range(self.numNeurons):
+                allOutWeights[neuronInc] += self.outputWeights[plant][neuronInc]
+                for sensorInc in range(self.numNeurons):
+                    allHiddenWeights[neuronInc][sensorInc]+=\
+                                self.hiddenWeights[plant][neuronInc][sensorInc]
+        #divide the sum of all weights by number to get average
+        for neuronInc in range(self.numNeurons):
+            allOutWeights[neuronInc] = str(allOutWeights[neuronInc]/plantCount)
+            for sensorInc in range(self.numNeurons):
+                allHiddenWeights[neuronInc][sensorInc] /= plantCount
+        return allOutWeights, allHiddenWeights
+        
+    def storeWeights(self,allOutWeights,allHiddenWeights):
+        filePath = "Plant_Data"+os.sep+self.species+"Optimal"
         #Folder = Plant_Data/Tomato/Tomato1/month
         if not os.path.exists(filePath):
             os.makedirs(filePath)
@@ -366,13 +396,16 @@ class neuralNetwork(object):
         with open(txtFile, "wt") as f:
             #REMEMBER: STORING outputs weights separated by "," then right 
             #after ";" to separate the hidden weights
-            outWeightString = ",".join(self.outputWeights)
+            outWeightString = ",".join(allOutWeights)
             hiddenWeightString = ""
             for neuronInc in range(self.numNeurons):
-                hiddenWeightString+= ",".join(str(sub) for sub in self.hiddenWeights[neuronInc]
+                for sensorInc in range(self.numNeurons):
+                    hiddenWeightString+=str(allHiddenWeights[neuronInc][sensorInc])
+                    hiddenWeightString+=","
+                    #WATCH OUT: end of the hidden string has extra comma, must remove
             allLines = outWeightString + ";" + hiddenWeightString
             #[[1,2,3],[4,5,6]] --> "1,2,3,4,5,6"
-            f.close() #erase data already stored in there, replace with new data
+            f.truncate() #erase data already stored in there, replace with new data
             f.write(allLines)
             
     def activeFunc(self,net):
@@ -380,7 +413,6 @@ class neuralNetwork(object):
         return neuronOutput
         
     def main(self,type):
-        error = []
         for plant in self.indivPlantVals:
             self.initializeNeuralNetwork(plant)
             self.initializeNewWeights(plant)
@@ -388,18 +420,6 @@ class neuralNetwork(object):
             self.calcHiddenOut(plant)
             self.calcOuterNet(plant)
             self.calcOuterOut(plant)
-            error.append(sum(self.errors))
-        return error
-            
-            
-# test = Stats("Basil")
-# test.main()
-# learning = neuralNetwork(test.indivPlantVals,test.valueTypes,test.optVals)
-
-
-# Updated Animation Starter Code
-
-
 
 ####################################
 # customize these functions
@@ -418,9 +438,8 @@ def init(data):
     data.learning = neuralNetwork(data.species,data.test.indivPlantVals,
                 data.test.valueTypes,data.test.optVals,data.test.valueChanges)
     data.learning.initializeWeights()
-    data.error = data.learning.main(data.type)
+    data.learning.main(data.type)
     data.plant = "Basil3"
-
 def mousePressed(event, data):
     # use event.x and event.y
     pass
@@ -432,6 +451,8 @@ def keyPressed(event, data):
         for plant in data.learning.indivPlantVals:
             data.learning.backProp(data.type,plant)
             data.learning.updateAllWeights(plant)
+        outWeights, hiddenWeights= data.learning.getAverageWeights()
+        data.learning.storeWeights(outWeights,hiddenWeights)
 
 def timerFired(data):
     data.timerCalled+= 1
@@ -452,29 +473,24 @@ def redrawAll(canvas, data):
             if col == 0:
                 input = Stats.calcMedian(data.test.indivPlantVals[data.plant][row])
                 input = input - data.test.optVals[row]
-                text = "%.1f"%input
-                canvas.create_text(x0+data.d/2,y0+data.d/2,
-                        text=text)
-                canvas.create_text(x0+data.d,y0+data.d,
-                        text=data.learning.hiddenWeights[data.plant][row][col])
+                tempValDiff = "%.1f"%input
+                canvas.create_text(x0+data.d/2,y0+data.d/2,text=tempValDiff)
+                weight = data.learning.hiddenWeights[data.plant][row][col]
+                canvas.create_text(x0+data.d,y0+data.d,text="%.1f"%weight)
                         
             elif col ==1:
-                text = "N%d"%row
-                canvas.create_text(x0+data.d,y0+data.d,
-                                        text=data.learning.outputWeights[data.plant][row])
-                canvas.create_text(x0+data.d/2,y0+data.d/2,text=text)
-            
+                neuron = "N%d"%row
+                weight = data.learning.outputWeights[data.plant][row]
+                canvas.create_text(x0+data.d,y0+data.d,text="%.1f"%weight)
+                canvas.create_text(x0+data.d/2,y0+data.d/2,text=neuron)
             
     x0,y0 = 2*data.sep,data.sep,
     x1,y1 = 2*data.sep+data.d,data.sep+data.d
     canvas.create_oval(x0,y0,x1,y1,fill="pink")
     canvas.create_text(x0+data.d/2,y0+data.d/2,text="Out")
     canvas.create_text(x0+data.d,y0+data.d,text="%.1f"%data.test.indivPlantVals[data.plant][-1][-1])
-    error = sum(data.error)
+    error = sum(data.learning.errors)
     canvas.create_text(x0,y0,anchor=NE,text=str(error))
-    
-        
-        
 
 ####################################
 # use the run function as-is
