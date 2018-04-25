@@ -1,6 +1,7 @@
 # Mode Demo
 from tkinter import *
-from PIL import Image
+from PIL import Image, ImageTk
+import os
 #https://stackoverflow.com/questions/765736/using-pil-to-make-all-white-pixels-transparent
 ####################################
 # init
@@ -20,20 +21,20 @@ def init(data):
     data.plantSpecies = ["strawberry","pumpkin","corn","broccoli"]
     data.plantImages = dict()
     
+    
 def initImages(data):
     for plant in data.plantSpecies:
-        data.allPlants[plant]
         img = Image.open(data.plantFolder+os.sep+"%s.png"%plant)
         img = img.convert("RGBA")
         pixelData = img.getdata()
         newData = []
         for color in pixelData:
-            if color[0]==color[1]==color[2]==255:#get rid of white background
+            if color[0]>=240 and color[1]>=240 and color[2]>=240:
+                #get rid of white background
                 newData.append((255, 255, 255, 0))
             else:
-                newData.append(item)
-        img.putdata(newdata)
-        data.plantImages[plant]=img
+                newData.append(color)
+        img.putdata(newData)
         
 def sickeningLeaf(data,):
     #do the same as the above except increase yellow
@@ -48,7 +49,6 @@ def dragAndDrop(data):
 #do something with floodfill for image processing, like adding bugs to leaves
     
     
-
 def initCoreObjects(data):
     data.coreObjects = dict()
     data.coreObjects["gardenBed"]= ((data.cols//4,data.rows//2),data.cols//2,data.rows*3//4)
@@ -65,8 +65,6 @@ def initColors(data):
     data.colors["healthyLeaf"] = "dark green"
     data.colors["weakLeaf"] = "yellow green"
     data.colors["deadLeaf"] = "chocolate3"
-    
-    
     
 
 ####################################
@@ -155,9 +153,27 @@ def playGameTimerFired(data):
 def playGameRedrawAll(canvas, data):
     drawBoard(canvas,data)
     drawCoreObjects(canvas,data)
+    drawPlants(canvas,data)
     
-    
+def drawPlants(canvas,data):
+    shift = 1
+    for plant in data.plantSpecies:
+        (cX,cY),radius,height = data.coreObjects["selectTable"]
+        startX = cX-radius//2
+        endX = cX+radius//2
+        startY = cY-height//2
+        endY = startY+radius
+        canvas.create_oval(100, 50, 300, 150,"yellow")
+        canvas.create_oval(startX,startY*data.cellSize*shift,endX,
+                    endY*data.cellSize*shift,data.colors["healthyLeaf"])
+        shift += 1
 
+    #     (x,y),width,height = data.coreObjects["selectTable"]
+    #     image = data.plantImages[plant]
+    #     render = ImageTk.PhotoImage(image)
+    #     imageLabel = Label(image=render)
+    #     imageLabel.image = render
+    #     imageLabel.place(x=(x*data.cellSize),y=(y*data.cellSize*shift))
 ####################################
 # Core Functionality
 ####################################  
@@ -166,6 +182,7 @@ def drawCoreObjects(canvas,data):
     for object in data.coreObjects:
         (cX,cY),width,height = data.coreObjects[object]
         color = data.colors[object]
+        #cx,cy,width,height are rows and cols, not actualy sizes
         startX = cX-width//2
         startY = cY-height//2
         endX = cX+width//2
