@@ -20,19 +20,20 @@ class neuralNetwork(object):
         self.changeFactor = 2
         
     def collectData(self):
-        for inc in range(10):#each species has 10 plants from 0 to 9
-            plant = self.plant+str(inc)
-            self.allValues[plant] = {"sizeChange":[]}
-            for inc in range(len(self.valueTypes)):
-                factor = self.valueTypes[inc]
-                file = self.dataFolder+os.sep+plant+"Train%s.csv"%factor
-                dataTrain = pd.read_csv(file)
-                xTrain = dataTrain[factor].values.reshape(1,-1)
-                yTrain = dataTrain['sizeChange'].values.reshape(1,-1)
-                sensorVals = xTrain.tolist()
-                sizeChange = yTrain.tolist()
-                self.allValues[plant][factor] = sensorVals[0]
-                self.allValues[plant]["sizeChange"].append(sizeChange[0])
+        for i in range(100):
+            for inc in range(10):#each species has 10 plants from 0 to 9
+                plant = self.plant+str(inc)
+                self.allValues[plant] = {"sizeChange":[]}
+                for inc in range(len(self.valueTypes)):
+                    factor = self.valueTypes[inc]
+                    file = self.dataFolder+os.sep+plant+"Train%s.csv"%factor
+                    dataTrain = pd.read_csv(file)
+                    xTrain = dataTrain[factor].values.reshape(1,-1)
+                    yTrain = dataTrain['sizeChange'].values.reshape(1,-1)
+                    sensorVals = xTrain.tolist()
+                    sizeChange = yTrain.tolist()
+                    self.allValues[plant][factor] = sensorVals[0]
+                    self.allValues[plant]["sizeChange"].append(sizeChange[0])
         
     def initializeNeuralNetwork(self):
         self.hiddenLayerNet = [self.hiddenBias]*(self.numNeurons)
@@ -99,12 +100,12 @@ class neuralNetwork(object):
             #for every neuron...
             errorWrtOuterOut, outerOutWrtOuterNet = \
                         self.updateOutputWeights(plant,neuronInc,valueInc)
-                                    
+
             for sensorInc in range(self.numNeurons):
                 #update weight for each input
                 self.updateHiddenWeights(plant,neuronInc,sensorInc,valueInc,
                                     errorWrtOuterOut,outerOutWrtOuterNet)
-        
+
     def updateOutputWeights(self,plant,neuronInc,valueInc):
         #output and target: growth rate of plant over one day
         target = 0
@@ -113,7 +114,8 @@ class neuralNetwork(object):
         for sensorInc in range(len(self.valueTypes)):
             #sum up the contributions to plant growth from each factor
             target += self.allValues[plant]["sizeChange"][sensorInc][valueInc]
-        print(output,target)
+        print(target,output)
+        #print(output,target)
         error = .5*(target-output)**2 
         self.errors.append(error)
         
