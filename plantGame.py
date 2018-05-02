@@ -17,6 +17,8 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
 import math
+import string
+
 
 
 ####################################################################################
@@ -34,7 +36,6 @@ def init(data):
     initCoreObjects(data)
     initPlants(data)
     collectUsernames(data)
-    calcWeatherProb(data)
     setResistances(data)
     data.clicked = False
     data.paused = False
@@ -44,6 +45,7 @@ def init(data):
     data.noneEntered = False
     data.loginBoxSelected = False
     data.monthSelected = False
+    data.invalidFlag = False
 
 def initStorages(data):
     data.controlVals = dict()
@@ -64,6 +66,7 @@ def initStorages(data):
     data.infectedPlants = []
     data.allScores = set()
     data.infectProbs = dict()
+    data.plantLocs = dict()
     data.weatherEvent = [False]*len(data.valueTypes)
     data.bugFactorWeights = [.4,.2,.4] #adjustable, just hardcoded for now
     data.weedFactorWeights = [.2,.4,.4]
@@ -79,8 +82,9 @@ def initUI(data):
     data.endSize = 0
     data.endTime = 50
     data.timeFactor = 3
-    data.weatherTime = 5
+    data.weatherTime = 8
     data.growthTime = 2
+    data.spawnTime = 5
     data.optGrowth = 0
     data.plantCount = 0
     data.buttonH = data.rows//30
@@ -96,6 +100,7 @@ def initUI(data):
     data.butLine = 2
     data.imageSide = data.cols//4
     data.runButLoc = data.rows*9/10,data.cols*7/10
+    data.loginBoxLoc = data.rows/10, data.cols/2
     data.weedSize = 2
     
 def initCoreObjects(data):
@@ -107,6 +112,7 @@ def initCoreObjects(data):
     
 def initColors(data):
     data.colors = dict()
+    data.boxFill = "white"
     data.colors["board"] = "white"
     data.colors["gardenBed"] = "saddle brown"
     data.colors["guideButton"] = "pink"
@@ -131,7 +137,9 @@ def initPlants(data):
         (col,row),colSpan,rowSpan = data.coreObjects["selectTable"]
         row = (row-rowSpan/2)+((inc+1)*rowSpan/(len(data.plantSpecies)+1))
         data.plantImages[plant] = [(row,col,data.plantSize,data.baseGrowthRate)]
-        data.allPlantSizes[plant] = dict()
+        data.allPlantSizes[plant] = {(row,col):[data.plantSize]}
+        data.plantLocs[plant] = set()
+        data.plantLocs[plant].add((row,col))
         
 ################################## InitFunctions ###################################
 ####################################################################################
@@ -144,7 +152,7 @@ def setResistances(data):
     data.plantDist = dict()
     data.plantRes["Kale"] = .2
     data.plantDist["Kale"] = 5
-    data.plantRes["Strawberry"] = .8
+    data.plantRes["Strawberry"] = .6
     data.plantDist["Strawberry"] = 4
     data.plantRes["Pumpkin"] = .3
     data.plantDist["Pumpkin"] = 7
@@ -164,7 +172,7 @@ def trackSliderBalls(data):
         #sliderBallLocs uses rows, cols for key, actual location for value
         data.sliderBallLocs[(row,col)]=(cx,cy)
         data.controlVals[(row,col)]=[data.userValues[inc],data.valueTypes[inc]]
-    
+        
 def linReg(data):
     if data.simRunning: return
     for plant in data.plantSpecies:
@@ -187,10 +195,10 @@ def linReg(data):
             inc+=1
         growthRate = (result[0]+result[1])*result[2]/data.timeFactor
         data.optGrowth = (opt[0]+opt[1])*opt[2]/data.timeFactor
-        for inc in range(1,len(data.plantImages[plant])):
+        for plantInc in range(1,len(data.plantImages[plant])):
             #range(1,len) to not include first plant in selecTable
-            (row,col,size,rate) = data.plantImages[plant][inc]
-            data.plantImages[plant][inc] = (row,col,size,growthRate)
+            (row,col,size,rate) = data.plantImages[plant][plantInc]
+            data.plantImages[plant][plantInc] = (row,col,size,growthRate)
     
 def checkRunButton(event,data):
     row,col= data.runButLoc
@@ -241,12 +249,12 @@ def updateSlider(data,event):
 def updatePlants(data):
     data.allTimes.append(data.timerCalled//data.growthTime)
     for species in data.plantSpecies:
-        if len(data.plantImages[species]) == 1: continue
+        #if len(data.plantImages[species]) == 1: continue
         for inc in range(1,len(data.plantImages[species])):
         #range(1,len) to not include first species in selecTable
             (row,col,size,rate) = data.plantImages[species][inc]
             if len(data.infectedPlants)!=0:
-                for (values,species,probInfect) in data.infectedPlants:
+                for (values,infSpecies,probInfect) in data.infectedPlants:
                     (checkRow,checkCol,checkSize,checkRate) = values
                     if row == checkRow and col == checkCol:
                         change = infectChange(data)
@@ -284,11 +292,11 @@ def clickGarden(event,data):
         return True
     
 def createPlant(event,data):
-    (row,col,size,rate) = data.plantImages[data.selectedPlant][0]
     row = event.y/data.cellSize
     col = event.x/data.cellSize
-    data.plantImages[data.selectedPlant].append((row,col,size,rate))
-    data.allPlantSizes[data.selectedPlant][(row,col)]= [size]
+    data.plantImages[data.selectedPlant].append((row,col,data.plantSize,0))
+    data.allPlantSizes[data.selectedPlant][(row,col)]= [data.plantSize]
+    data.plantLocs[data.selectedPlant].add((row,col))
     data.plantCount +=1
     calcInfectedProb(data)
     
@@ -299,11 +307,10 @@ def calcWeatherProb(data):
     month = int(data.month)
     heatDistribution = norm(6.5,2)
     heatFactor = heatDistribution.pdf(month)*4
-    
+    brightMonth = rainMonth = month
     if month >= 7: #July-Dec
         rainMonth = abs(month-13)
         brightMonth = month-13
-    else: rainMonth = month
     rainDistribution = norm(0,5)
     moistFactor = rainDistribution.pdf(rainMonth)*7.5
     
@@ -313,9 +320,9 @@ def calcWeatherProb(data):
                                     brightDistribution2.pdf(brightMonth))*4
     data.weatherProbs = [heatFactor,brightFactor,moistFactor]
     
-    
+
 def randomWeather(data):
-    randomChance = random.randint(0,100)/100
+    randomChance = random.uniform(0,1)
     for inc in range(len(data.weatherProbs)):
         factor = data.weatherProbs[inc] #factors already generated at start
         if randomChance <= factor: #the higher the prob, more likely under the curve
@@ -332,7 +339,7 @@ def rainEvent(data):
         vy = random.randint(4,7)
         if spawnRain:
             data.allDrops.append((0,col,vx,vy))
-    
+    #winsound.PlaySound('rain.wav', winsound.SND_FILENAME)
     
 def moveRain(data):
     newDrops = []
@@ -347,7 +354,6 @@ def moveRain(data):
 def hotEvent(data):
     data.background = "navajo white"
     
-    
 def brightEvent(data):
     #have the sun get brighter or the clouds disappear
     pass
@@ -361,18 +367,19 @@ def callWeatherEvents(data):
     if data.weatherEvent[2]: rainEvent(data)
             
 def recordUsername(data):
+    if data.endSize <0: data.endSize = 0
     line = "%s,%.1f;"%(data.username,data.endSize)
     filePath = data.usernameFilePath + os.sep + "Collection.txt"
-    with open(filePath, "wt") as f:
-        f.write(line)  
+    contents = readFile(filePath)
+    contents+=line
+    writeFile(filePath,contents)
     
 def collectUsernames(data):
     if not os.path.exists(data.usernameFilePath):
         os.mkdir(data.usernameFilePath)
     filePath = data.usernameFilePath + os.sep + "Collection.txt"
     if not os.path.exists(filePath): return
-    with open(filePath, "rt") as f:
-        contents = f.read()
+    contents = readFile(filePath)
     for user in contents.split(";"):
         if user == "": continue
         values = user.split(",")
@@ -384,8 +391,15 @@ def collectUsernames(data):
                 [])+[username]
         data.allScores.add(float(score))
     
+def readFile(filePath):
+    with open(filePath, "rt") as f:
+        return f.read()
+        
+def writeFile(filePath,contents):
+    with open(filePath, "wt") as f:
+        f.write(contents)
+    
 def storeUsername(data):
-    if data.username == "": data.noneEntered = True
     for score in data.allUsernames:
         if data.username in data.allUsernames[score]:
             data.userRepeatFlag = True
@@ -396,6 +410,7 @@ def calcEndSize(data):
     for plant in data.plantImages:
         for (row,col) in data.allPlantSizes[plant]:
             size = data.allPlantSizes[plant][(row,col)][-1]
+            if size<0: size = 0
             data.endSize += size
     data.endSize /= data.plantCount
     
@@ -425,24 +440,25 @@ def calcBugs(data):
 def checkInfected(data,plant,species):
     (curRow,curCol,curSize,curRate) = plant
     probInfect = data.infectProbs[(curRow,curCol)]
-    if random.randint(0,40) <= probInfect*100:
-        data.infectedPlants.append((plant,species,probInfect))
+    if random.randint(0,100) <= probInfect*100:
+        if (plant,species,probInfect) not in data.infectedPlants:
+            data.infectedPlants.append((plant,species,probInfect))
         
 def calcInfectedProb(data):
     for species in data.plantSpecies:
         #skip species if no plants in garden
-        if len(data.plantImages[species]) == 1:
-            continue
+        # if len(data.plantImages[species]) == 1:
+        #     continue
+        probInfect = data.plantRes[species]
         for selfInc in range(1,len(data.plantImages[species])):
-            probInfect = data.plantRes[species]
             plant = data.plantImages[species][selfInc]
             (curRow,curCol,curSize,curRate) = plant
             #check neighbors
             for speciesType in data.plantSpecies:
                 neighborProb = data.plantRes[speciesType]
                 #skip species if no neighbors in garden
-                if len(data.plantImages[speciesType])==1:
-                    continue
+                # if len(data.plantImages[speciesType])==1:
+                #     continue
                 for neighborInc in range(1,len(data.plantImages[speciesType])):
                     neighborPlant = data.plantImages[speciesType][neighborInc]
                     (neighborRow,neighborCol,size,rate) = neighborPlant
@@ -459,76 +475,83 @@ def calcInfectedProb(data):
 def spreadInfection(data):
     for plant,species,probInfect in data.infectedPlants:
         curRow,curCol,curSize,curRate = plant
-        print(curRow,curCol)
         for speciesType in data.plantSpecies:
             neighborProb = data.plantRes[speciesType]
             #skip species if no neighbors in garden
-            print("maybe")
-            if len(data.plantImages[speciesType]) == 1: continue 
+            #if len(data.plantImages[speciesType]) == 1: continue 
             #1,len() to not include the first plants in selectTable
             for inc in range(1,len(data.plantImages[speciesType])):
-                (row,col,size,rate) = newPlant = data.plantImages[speciesType][inc]
+                newPlant = data.plantImages[speciesType][inc]
+                (row,col,size,rate) = newPlant
                 distance = math.sqrt((curRow-row)**2+(curCol-col)**2)
                 weight = 1-probSpect(distance,data.plantDist[speciesType])
-                infectNewProb = (probInfect*(1-weight))+(neighborProb*weight)
-                print("donezo")
-                if random.randint(0,100) <= infectNewProb*100:
+                infectNewProb = (neighborProb*(1-weight))+(probInfect*weight)
+                if random.randint(0,100) < infectNewProb*100:
+                    if speciesType != "Strawberry":
+                        print(infectNewProb)
                     #row,col are bug's loc, store target loc in plant
                     data.spreadedPlants.append((plant,newPlant,species,infectNewProb))
                     #DEAL WITH data.infectedPlants's ((plant,species,probInfect))
                     #How to deal with probInfect
                     #Then deal with plant color and growth rate change from bug
                     
-                    
 def spazzBug(data):
     for inc in range(len(data.bugLocs)):
         #(row,col,bugLoc,species) = data.bugLocs[inc]
-        (row,col,plant,species) = data.bugLocs[inc]
+        (row,col,plant,infSpecies) = data.bugLocs[inc]
         #cx,cy are new possible location of bug
-        plantRow,plantCol,size,rate = plant
+        plantRow,plantCol,oldSize,rate = plant
+        newPlantSpecies = getSpecies(data,plantRow,plantCol)
+        newSize = data.allPlantSizes[newPlantSpecies][(plantRow,plantCol)][-1]
         cx = col*data.cellSize
         cy= row*data.cellSize
-        bounds = int(size/2*data.cellSize)
-        cx += random.randint(-bounds,bounds)
-        cy += random.randint(-bounds,bounds)
-        
-        #if newPosLegal(data,cx,cy,plantRow,plantCol,size):
-        newCol = cx/data.cellSize
-        newRow = cy/data.cellSize
-        data.bugLocs[inc] = (newRow,newCol,plant,species)
+        bounds = int(newSize/2*data.cellSize)
+        if bounds > 0:
+            cx += random.randint(-bounds,bounds)
+            cy += random.randint(-bounds,bounds)
+        if newPosLegal(data,cx,cy,plantRow,plantCol,newSize):
+            newCol = cx/data.cellSize
+            newRow = cy/data.cellSize
+            data.bugLocs[inc] = (newRow,newCol,plant,newPlantSpecies)
         
 def newPosLegal(data,cx,cy,row,col,size):
     plantY = row*data.cellSize
     plantX = col*data.cellSize
     distance = math.sqrt((plantY-cy)**2+(plantX-cx)**2)
-    if distance < size/2:
+    if distance < size:
         return True
-    else: return False
+    else: 
+        return False
     
 def probSpect(value,z,M = 1,k = .2):
     deno = 1+math.e**(-k*(value-z))
     result = (M/deno)
     return result
     
+def getSpecies(data,row,col):
+    for species in data.plantLocs:
+        if (row,col) in data.plantLocs[species]: 
+            return species #get species of target plant
+        
+    
 def spreadBugs(data):
     newSpreadPlants = []
-    if len(data.spreadedPlants)==0: return
     for inc in range(len(data.spreadedPlants)):
-        #row, col are the target plant
-        #curRow and curCol are the plant that just spread the infection
-        (infPlant,newPlant,species,probInfect) = data.spreadedPlants[inc]
+        infPlant,newPlant,species,probInfect = data.spreadedPlants[inc]
         curRow,curCol,size,rate = infPlant
-        row,col,newSize,newRate = newPlant
-        distanceY = curRow - row
-        distanceX = curCol - col
-        curRow+= distanceY/3
-        curCol+= distanceX/3
+        newRow,newCol,newSize,newRate = newPlant
+        newPlantSpecies = getSpecies(data,newRow,newCol)
+        newSize = data.allPlantSizes[newPlantSpecies][(newRow,newCol)][-1]
+        distanceY = curRow - newRow
+        distanceX = curCol - newCol
+        curRow-= distanceY/3
+        curCol-= distanceX/3
         infPlant =  curRow,curCol,size,rate
         #basically, update location of bug(infPlant), keep new plant's loc
-        netDistance = math.sqrt((curRow-row)**2+(curCol-col)**2)
-        if netDistance < size/2:
+        netDistance = math.sqrt((curRow-newRow)**2+(curCol-newCol)**2)
+        if netDistance < newSize/2:
             data.infectedPlants.append((newPlant,species,probInfect))
-            data.bugLocs.append((row,col,newPlant,species))
+            data.bugLocs.append((curRow,curCol,newPlant,species))
         else:
             newSpreadPlants.append((infPlant,newPlant,species,probInfect))
     #get rid of bugs that reached their end goal
@@ -603,18 +626,18 @@ def drawRainDrops(canvas,data):
 def spawnBug(data):
     for species in data.plantSpecies:
         #skip species if no plants in garden
-        if len(data.plantImages[species]) == 1: continue
+        #if len(data.plantImages[species]) == 1: continue
         for inc in range(1,len(data.plantImages[species])):
-            #plant = (curRow,curCol,curSize,curRate)
             plant = data.plantImages[species][inc]
             checkInfected(data,plant,species)
     
 def drawBugs(canvas,data):
     if len(data.infectedPlants)==0: return
-    for plant,species,probInfect in data.infectedPlants:
-        (row,col,size,rate) = plant
-       # data.bugLocs.append((row,col,(row,col),species))
-        data.bugLocs.append((row,col,plant,species))
+    if data.timerCalled%10==0:
+        for plant,species,probInfect in data.infectedPlants:
+            (row,col,size,rate) = plant
+            # data.bugLocs.append((row,col,(row,col),species))
+            data.bugLocs.append((row,col,plant,species))
     for inc in range(len(data.bugLocs)):
         bugInfo = data.bugLocs[inc]
        # (row,col,plant,species) = bugInfo
@@ -624,38 +647,32 @@ def drawBugs(canvas,data):
         r = data.cellSize/2
         canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill=data.colors["bug"])    
     for inc in range(len(data.spreadedPlants)):
-        infPlant,newPlant,species,probInfect = data.spreadedPlants[inc]
+        infPlant = data.spreadedPlants[inc][0]
         row,col,size,rate = infPlant
         cx = col*data.cellSize
         cy = row*data.cellSize
         r = data.cellSize/2
-        canvas.create_rectangle(cx-data.cellSize,cy-data.cellSize,
-                        cx+data.cellSize,cy+data.cellSize,fill+"orange")
         canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill=data.colors["bug"])   
 
 def drawTextAndBut(canvas,data):
     createButton(canvas,data,data.runButLoc,"Run Simulation")
     drawText(canvas,data,1,data.cols/4,"Test Your Knowledge of Plants")
-    drawText(canvas,data,2.5,data.cols/4,"by Choosing the Optimal Growth Parameters!")
-    
+    drawText(canvas,data,3,data.cols/4,"by Choosing the Optimal Growth Parameters!")
     temp, bright, moist = list(data.controlVals.values())
     drawText(canvas,data,1,data.cols*3/4,"Temperature: %d Brightness: %d Moisture: %d"%(temp[0],bright[0],moist[0]))
     drawText(canvas,data,data.rows/2,data.cols*3/4,"Press 'd' to delete last plant")
+    
+    drawText(canvas,data,5,data.cols/4,
+            "Hot Weather Probability:%.2f"%data.weatherProbs[0])
+    drawText(canvas,data,7,data.cols/4,
+            "Bright Day Probability:%.2f"%data.weatherProbs[1])
+    drawText(canvas,data,9,data.cols/4,
+            "Rain Probability:%.2f"%data.weatherProbs[2])
     if data.noneEntered:
-        drawText(canvas,data,data.rows/2,data.cols/2,"Don't Leave It Blank!","red")
+        drawText(canvas,data,data.rows/2,data.cols/2,"Don't Leave It Blank!",fill="red")
     for plant in data.plantImages:
         row,col,size,rate = data.plantImages[plant][0]
         drawText(canvas,data,row-size*3/4,col,plant)
-    
-def drawMonth(canvas,data):
-    if data.monthSelected: boxFill = "grey"
-    else: boxFill = "white"
-    row, col = data.monthBoxLoc
-    y,x = row*data.cellSize-data.textH, col*data.cellSize-20
-    #month textbox
-    canvas.create_rectangle(x,y,x+40,y+data.textH*2,fill=boxFill)
-    drawText(canvas,data,row,col,str(data.month))
-    drawText(canvas,data,row-2.75,data.cols/2,"Current Month: %s"%data.month)
     
 def drawCoreObjects(canvas,data):
     for object in data.coreObjects:
@@ -682,6 +699,11 @@ def drawCell(canvas,data,row,col,fill):
     sideTop = data.cellSize*row
     canvas.create_rectangle(sideLeft,sideTop,sideLeft+data.cellSize,
             sideTop+data.cellSize,fill=fill,outline="")
+            
+def drawEntryBox(canvas,data,row,col,length):
+    cx = col*data.cellSize
+    cy = row*data.cellSize
+    canvas.create_rectangle(cx-length,cy-data.textH/2,cx+length,cy+data.textH/2,fill=data.boxFill)
             
 def drawText(canvas,data,row,col,text,font="",fill="black"):
     if font == "": font = "Arial %d bold "%data.textH
@@ -743,44 +765,51 @@ def redrawAll(canvas,data):
     elif data.mode == "simGarden": simGardenRedrawAll(canvas,data)
     
 def loginMousePressed(event,data):
-    data.noneEntered = False
     data.userRepeatFlag = False
+    data.loginBoxSelected = False
     #login box
-    row, col = 10, data.cols/2
-    cx = col*data.cellSize
-    cy = row*data.cellSize
-    if (cx-50<event.x<cx+50) and (cy-data.textH/2<event.y<cy+data.textH/2):
+    boxRow, boxCol = data.loginBoxLoc
+    cx = boxCol*data.cellSize
+    cy = boxRow*data.cellSize
+    if (cx-data.buttonL*3<event.x<cx+data.buttonL*3) and (cy-data.textH/2<event.y<cy+data.textH/2):
         data.loginBoxSelected = True
-    else: data.loginBoxSelected = False
     #login button
-    row, col = 5,data.cols/2
-    x0,y0,x1,y1 = calcBoxDimen(data,row,col,data.buttonL,data.buttonH)
+    boxRow+4,boxCol-data.buttonL/2
+    x0,y0,x1,y1 = calcBoxDimen(data,boxRow+4,boxCol-data.buttonL/2,
+        data.buttonL,data.buttonH)
     if (x0<event.x<x1) and (y0<event.y<y1):
-        storeUsername(data)
+        if data.username == "":
+            data.noneEntered = True
+        else:
+            storeUsername(data)
+            calcWeatherProb(data)
+            data.boxFill = "white"
+            
     
 def setupGardenMousePressed(event, data):
     data.noneEntered = False
+    data.monthSelected = False
+    data.boxFill = "white"
     if checkRunButton(event,data): 
         if data.plantCount ==0: 
             data.nonEntered = True
             return
-        try:month = int(data.month)
-        except:return
+        month = int(data.month)
         linReg(data)
         data.simRunning = True
         data.timerCalled = 1
         data.mode = "simGarden"
-        calcWeatherProb(data)
     selectPlants(event,data)
     if data.selectedPlant != "":
         if clickGarden(event,data):
             createPlant(event,data)
-    row, col = data.monthBoxLoc
-    y,x = row*data.cellSize, col*data.cellSize-20
-    if (x<event.x<x+40) and (y<event.y<y+data.textH):
+    boxRow, boxCol = data.loginBoxLoc
+    cx = boxCol*data.cellSize
+    cy = boxRow*data.cellSize
+    if (cx-data.buttonL<event.x<cx+data.buttonL) and\
+            (cy-data.textH/2<event.y<cy+data.textH/2):
         data.monthSelected = True
-    else: data.monthSelected = False
-    
+        data.boxFill = "grey"
         
 def simGardenMousePressed(event, data):
     pass
@@ -789,18 +818,27 @@ def simGardenMousePressed(event, data):
 def loginKeyPressed(event,data):
     data.noneEntered = False
     data.userRepeatFlag = False
+    data.invalidFlag = False
     if data.loginBoxSelected:
-        data.username+= event.char
         if event.keysym == "BackSpace":
-            data.username = data.username[:-5]
+            data.username = data.username[:-1]
+        elif (event.char == ",") or (event.char == ";"):
+            data.invalidFlag = True
+            data.username = data.username[:-1]
+        else:
+            data.username+= event.char
 
 def setupGardenKeyPressed(event, data):
     if event.keysym == 'Escape':
         data.selectedPlant = ""
     elif data.monthSelected:
-        data.month+= event.char
         if event.keysym == "BackSpace":
             data.month = data.month[:-1]
+        elif event.char in string.ascii_letters:
+            return
+        else:
+            data.month+= event.char
+            calcWeatherProb(data)
     
     
 def simGardenKeyPressed(event, data):
@@ -812,25 +850,28 @@ def setupGardenTimerFired(data):
     data.timerCalled+=1 
 
 def simGardenTimerFired(data):
-    if not data.simRunning: return 
+    if data.simEnd or not data.simRunning: return 
     data.timerCalled+=1
     moveRain(data)
     spazzBug(data)
     calcWeeds(data)
     if random.randint(0,100) <= data.bugSpawnProb:
         spawnBug(data)
-    callWeatherEvents(data)
     if data.timerCalled%data.growthTime==0:
         updatePlants(data)
+    if data.timerCalled%data.spawnTime == 0:
         spreadBugs(data)
+        spreadInfection(data)
     if data.timerCalled%data.weatherTime == 0:
         randomWeather(data)
+        callWeatherEvents(data)
         calcBugs(data)
     if data.timerCalled == data.endTime:
         data.simRunning = False
         data.simEnd = True
         calcEndSize(data)
         showGraph(data)
+        recordUsername(data)
 
 def loginTimerFired(data):
     pass
@@ -843,9 +884,12 @@ def setupGardenRedrawAll(canvas, data):
     drawSlider(canvas,data,data.sliderLocs[2])
     drawCoreObjects(canvas,data)
     drawPlants(canvas,data)
-    drawMonth(canvas,data)
     #instructions 
     drawTextAndBut(canvas,data)
+    boxRow,boxCol = data.loginBoxLoc
+    drawEntryBox(canvas,data,boxRow,boxCol,data.buttonL)
+    drawText(canvas,data,boxRow,boxCol,str(data.month))
+    drawText(canvas,data,boxRow-2.75,boxCol,"Current Month")
     
 def simGardenRedrawAll(canvas,data):
     drawBoard(canvas,data)
@@ -856,25 +900,29 @@ def simGardenRedrawAll(canvas,data):
     drawText(canvas,data,1,data.cols/2,"Bug Prob:%.2f"%data.bugSpawnProb)
     if data.simEnd:
         drawLeaderBoard(canvas,data)
-        showGraph(data)
-        recordUsername(data)
+        
     #for all the factors, if random weather == True: drawRain(canvas,data)
         
 def loginRedrawAll(canvas,data):
-    drawText(canvas,data,3,data.cols/2,"Please Enter Your Username")
-    row, col = 10, data.cols/2
-    cx = col*data.cellSize
-    cy = row*data.cellSize
-    if data.loginBoxSelected: boxFill = "grey"
-    else: boxFill = "white"
-    canvas.create_rectangle(cx-50,cy-data.textH/2,cx+50,
-                                    cy+data.textH/2,fill=boxFill)
-    drawText(canvas,data,row,col,data.username)
+    boxRow, boxCol = data.loginBoxLoc
+    drawText(canvas,data,boxRow-5,boxCol,"Please Enter Your Username")
+    if data.loginBoxSelected: data.boxFill = "grey"
+    else: data.boxFill = "white"
+    drawEntryBox(canvas,data,boxRow,boxCol,data.buttonL*3)
+    drawText(canvas,data,boxRow,boxCol,data.username)
+    
+    cx = boxCol*data.cellSize
+    cy = boxRow*data.cellSize
     if data.userRepeatFlag:
-        drawText(canvas,data,10,data.cols/2,"That username has been taken. Choose another one","red")
+        drawText(canvas,data,boxRow+2,boxCol,
+            "That username has been taken. Choose another one",fill="red")
     if data.noneEntered:
-        drawText(canvas,data,12,data.cols/2,"Don't Leave It Blank!","red")
-    createButton(canvas,data,(5,data.cols/2),"Enter")
+        drawText(canvas,data,boxRow+2,boxCol,
+            "Don't Leave It Blank!",fill="red")
+    if data.invalidFlag:
+        drawText(canvas,data,boxRow+2,boxCol,
+            "Username can't contain ',' or ';'",fill="red")
+    createButton(canvas,data,(boxRow+4,boxCol-data.buttonL/2),"Enter")
     
     
 ################################## Tkinter ##################################
