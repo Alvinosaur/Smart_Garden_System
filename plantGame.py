@@ -58,35 +58,43 @@ def initStorages(data):
     data.allTimes = [0]
     data.allDrops = []
     data.bugLocs = []
-    data.allWeeds = []
+    data.allWeeds = set()
     data.spreadedPlants = []
+    data.weedInfo = dict()
     data.allUsernames = dict()
     data.optimalFactors = [80,70,45]
     data.optimalSizes = [0]
     data.infectedPlants = []
     data.allScores = set()
     data.infectProbs = dict()
+    data.collidingPlants = set()
     data.plantLocs = dict()
     data.weatherEvent = [False]*len(data.valueTypes)
     data.bugFactorWeights = [.4,.2,.4] #adjustable, just hardcoded for now
     data.weedFactorWeights = [.2,.4,.4]
     data.monthBoxLoc = (8, data.cols//2)
     
+def initGlobals(data):
+    #location of bomb
+    pass
 
 def initUI(data):
     data.rows = data.cols = 100
     data.timerCalled = 1
     data.baseGrowthRate = 0
     data.bugSpawnProb = 0
+    data.weedSpawnProb = 0
     data.month = "7"
     data.endSize = 0
     data.endTime = 50
     data.timeFactor = 3
-    data.weatherTime = 8
-    data.growthTime = 2
-    data.spawnTime = 5
+    data.weatherTime = 15
+    data.totalScore = 0 
+    data.growthTime = 5
+    data.spawnTime = 10
     data.optGrowth = 0
     data.plantCount = 0
+    data.bombLoc = data.rows/4, data.cols*3/4
     data.buttonH = data.rows//30
     data.buttonL = data.buttonH*5
     data.sliderL = data.buttonH*8
@@ -259,16 +267,19 @@ def updatePlants(data):
                     if row == checkRow and col == checkCol:
                         change = infectChange(data)
                         rate -= change
-            size += rate
+            if (row,col) in data.collidingPlants:
+                rate -= 5#idk about this
+            size += rate/data.timeFactor
             if size <= 0: size = 0
             data.plantImages[species][inc] =(row,col,size,rate)
-            data.allPlantSizes[species][(row,col)].append(size+rate)
+            data.allPlantSizes[species][(row,col)].append(size)
+            data.totalScore += (size)
             prevSize = data.optimalSizes[-1]
             data.optimalSizes.append(data.optGrowth+prevSize)
             
 def infectChange(data):
     day = data.timerCalled//20
-    return math.e**(0.5*(day-5))
+    return math.e**(0.1*(day-10))
     
 def moveObjects(data,event):
     #these all have built-in checks for location
@@ -355,7 +366,7 @@ def hotEvent(data):
     data.background = "navajo white"
     
 def brightEvent(data):
-    #have the sun get brighter or the clouds disappear
+    data.bright=True
     pass
     
             
@@ -404,6 +415,7 @@ def storeUsername(data):
         if data.username in data.allUsernames[score]:
             data.userRepeatFlag = True
             return
+    
     data.mode = "setupGarden"
         
 def calcEndSize(data):
@@ -423,11 +435,19 @@ def calcWeeds(data):
     data.weedSpawnProb*= 100
     
 def spawnWeed(data):
-    if random.randint(0,100) <= data.weedSpawnProb:
-        (cCol,cRow),length,height = data.coreObjects["gardenBed"]
-        row = random.randint(int(cRow-height/2),int(cRow+height/2))
-        col = random.randint(int(cCol-length/2),int(cCol+length/2))
-        data.allWeeds.append((row,col,data.weedSize))
+    baseProb = data.weedSpawnProb
+    (cCol,cRow),length,height = data.coreObjects["gardenBed"]
+    row = random.randint(int(cRow-height/2),int(cRow+height/2))
+    col = random.randint(int(cCol-length/2),int(cCol+length/2))
+    distanceDistrib = norm(0,10)
+    for (neighborRow,neighborCol) in data.allWeeds:
+        distance = math.sqrt((row-neighborRow)**2+(col-neighborCol)**2)
+        neighborFactor = distanceDistrib.pdf(distance)*5
+        baseProb += neighborFactor*100 #convert to percentage
+    if random.randint(0,100) <= baseProb:
+        data.allWeeds.add((row,col))
+        print("yes")
+        data.weedInfo[(row,col)] = data.weedSize
     
 def calcBugs(data):
     data.bugSpawnProb = 0
@@ -486,14 +506,15 @@ def spreadInfection(data):
                 distance = math.sqrt((curRow-row)**2+(curCol-col)**2)
                 weight = 1-probSpect(distance,data.plantDist[speciesType])
                 infectNewProb = (neighborProb*(1-weight))+(probInfect*weight)
+                
                 if random.randint(0,100) < infectNewProb*100:
-                    if speciesType != "Strawberry":
-                        print(infectNewProb)
                     #row,col are bug's loc, store target loc in plant
                     data.spreadedPlants.append((plant,newPlant,species,infectNewProb))
                     #DEAL WITH data.infectedPlants's ((plant,species,probInfect))
                     #How to deal with probInfect
                     #Then deal with plant color and growth rate change from bug
+                    
+
                     
 def spazzBug(data):
     for inc in range(len(data.bugLocs)):
@@ -533,6 +554,67 @@ def getSpecies(data,row,col):
         if (row,col) in data.plantLocs[species]: 
             return species #get species of target plant
         
+def filterDistances(data):
+    maxRate = 0
+    maxSize = 0 
+    desired = set()
+    finalDesired = set()
+    filteredList = []
+    for speciesInc in range(len(data.plantSpecies)):
+        species = data.plantSpecies[speciesInc]
+        for plantInc in range(len(data.plantImages[species])):
+            plant = data.plantImages[species][plantInc]
+            row,col,size,rate = plant
+            rowValues.append(row)
+            colValues.append(col)
+            if rate > maxRate:
+                maxRate = rate
+                maxSize = size
+    rowDistances = getDistances(rowValues)
+    for inc in range(len(rowDistances)):
+        if rowDistances[inc] <= maxRate*data.endTime/data.growthTime*2:
+            firstInc = inc//(len(rowValues)-1)
+            secInc = inc%(len(rowValues)-1) + firstInc+1
+            desired.add((firstInc,secInc))
+    for firstInc,secInc in desired:
+        distance = abs(colValues[firstInc]-colValues[secInc])
+        if distance <= maxRate*data.endTime/data.growthTime*2+maxSize:
+            finalDesired.add((firstInc,secInc,distance))
+            
+# def checkDistances(data):
+#     for (firstInc,secInc,distance) in finalDesired:
+#         firstRow, firstCol = rowValues[firstInc],colValues[firstInc]
+#         secRow, secCol = rowValues[secInc],colValues[secInc]
+#         if ((firstRow,firstCol) in collidingPlants) and\
+#             ((secRow,secCol) in collidingPlants): continue
+#         firstSpecies = getSpecies(data,firstRow,firstCol)
+#         secondSpecies = getSpecies(data,secRow,secCol)
+#         for (row,col,size,rate) in data.plantImages[firstSpecies]:
+#             if firstRow == row and firstCol == col:
+#                 firstSize = size
+#         for (row,col,size,rate) in data.plantImages[secondSpecies]:
+#             if secRow == row and secCol == col:
+#                 secSize = size
+#         distance = math.sqrt((secRow-firstRow)**2+(secCol-firstCol)**2)
+#         if distance <= firstSize + secSize:
+#             collidingPlants.add((firstRow,firstCol))
+#             collidingPlants.add((secRow,secCol))
+#     
+# def getDistances(plantList):
+#     if len(plantList) == 2:
+#         return [plantList[0]-plantList[1]]
+#     else:
+#         firstElem = plantList[0]
+#         for inc in range(1,len(plantList)):
+#             result += [abs(firstElem-plantList[inc])]
+#         result += getDistances(plantList[1:])
+#         return result
+    
+def checkResults(data):
+    if data.totalScore > 5:
+        pass
+        #move on to next level
+    
     
 def spreadBugs(data):
     newSpreadPlants = []
@@ -544,8 +626,8 @@ def spreadBugs(data):
         newSize = data.allPlantSizes[newPlantSpecies][(newRow,newCol)][-1]
         distanceY = curRow - newRow
         distanceX = curCol - newCol
-        curRow-= distanceY/3
-        curCol-= distanceX/3
+        curRow-= distanceY/2
+        curCol-= distanceX/2
         infPlant =  curRow,curCol,size,rate
         #basically, update location of bug(infPlant), keep new plant's loc
         netDistance = math.sqrt((curRow-newRow)**2+(curCol-newCol)**2)
@@ -566,20 +648,26 @@ def spreadBugs(data):
 def drawPlants(canvas,data):
     for plant in data.plantSpecies:
         for inc in range(len(data.plantImages[plant])):
+            color = data.colors["healthyLeaf"]
             (row,col,size,rate) = data.plantImages[plant][inc]
+            if (row,col) in data.collidingPlants:
+                color = data.colors["weakLeaf"]
             canvas.create_oval((col-size/2)*data.cellSize,
                 (row-size/2)*data.cellSize,(col+size/2)*data.cellSize,
-                (row+size/2)*data.cellSize,fill=data.colors["healthyLeaf"],
+                (row+size/2)*data.cellSize,fill=color,
                 outline=data.colors[plant])
             if inc >0: drawText(canvas,data,row+1,col,"%.1f"%size) 
     for (row,col) in data.infectProbs:
         prob = data.infectProbs[(row,col)]
         drawText(canvas,data,row-1,col,"%.2f"%prob,fill="red")
-    for plant in data.allWeeds:
-        (row,col,size) = plant
+    
+def drawWeeds(canvas,data):
+    for weed in data.allWeeds:
+        (row,col) = weed
+        size = data.weedInfo[(row,col)]
         cy = row*data.cellSize
         cx = col*data.cellSize
-        canvas.create_oval(cx-size,cy-size,cx+size,cy+size,fill="red")
+        canvas.create_oval(cx-size,cy-size,cx+size,cy+size,fill="purple")
 
 def drawSlider(canvas,data,slider):
     (row,col) = slider
@@ -599,14 +687,15 @@ def drawSlider(canvas,data,slider):
 def drawLeaderBoard(canvas,data):
     canvas.create_rectangle(data.width/4,data.height/4,data.width*3/4,
                 data.height*3/4,fill=data.colors["leaderBoard"])
+    drawText(canvas,data,data.rows/4,data.cols/2,"Leaderboard:",fill="white")
     scores = sorted(list(data.allScores))
     names = ""
     count = 0
-    for score in scores:
+    for score in scores[::-1]:
         userList = data.allUsernames[score]
         for name in userList:
             count+=3
-            drawText(canvas,data,data.rows/4+count,data.cols/2,"%s:%.1f"%(name,score),fill="white")
+            drawText(canvas,data,data.rows/4+count+3,data.cols/2,"%s: %.1f"%(name,score),fill="white")
     
 def createButton(canvas,data,loc,text):
     (row,col) = loc
@@ -624,20 +713,20 @@ def drawRainDrops(canvas,data):
                     row*data.cellSize+vy,col*data.cellSize+vx,fill="blue")
     
 def spawnBug(data):
-    for species in data.plantSpecies:
-        #skip species if no plants in garden
-        #if len(data.plantImages[species]) == 1: continue
-        for inc in range(1,len(data.plantImages[species])):
-            plant = data.plantImages[species][inc]
-            checkInfected(data,plant,species)
+    if random.randint(0,100) <= data.bugSpawnProb:
+        for species in data.plantSpecies:
+            #skip species if no plants in garden
+            #if len(data.plantImages[species]) == 1: continue
+            for inc in range(1,len(data.plantImages[species])):
+                plant = data.plantImages[species][inc]
+                checkInfected(data,plant,species)
+        if data.timerCalled%20==0:
+            for plant,species,probInfect in data.infectedPlants:
+                (row,col,size,rate) = plant
+                # data.bugLocs.append((row,col,(row,col),species))
+                data.bugLocs.append((row,col,plant,species))
     
 def drawBugs(canvas,data):
-    if len(data.infectedPlants)==0: return
-    if data.timerCalled%10==0:
-        for plant,species,probInfect in data.infectedPlants:
-            (row,col,size,rate) = plant
-            # data.bugLocs.append((row,col,(row,col),species))
-            data.bugLocs.append((row,col,plant,species))
     for inc in range(len(data.bugLocs)):
         bugInfo = data.bugLocs[inc]
        # (row,col,plant,species) = bugInfo
@@ -652,7 +741,7 @@ def drawBugs(canvas,data):
         cx = col*data.cellSize
         cy = row*data.cellSize
         r = data.cellSize/2
-        canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill=data.colors["bug"])   
+        canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill="red")   
 
 def drawTextAndBut(canvas,data):
     createButton(canvas,data,data.runButLoc,"Run Simulation")
@@ -686,6 +775,16 @@ def drawCoreObjects(canvas,data):
         for row in range(startY,endY):
             for col in range(startX,endX):
                 drawCell(canvas,data,row,col,color)
+
+def drawBomb(canvas,data):
+    row,col = data.bombLocs
+    r = data.buttonL
+    x0 = col*data.cellSize
+    y0 = row*data.cellSize
+    canvas.create_oval(x0-r,y0-r,x0+r,y0+r,fill="black")
+    canvas.create_rectangle(x0,y0,x0+data.buttonL*data.cellSize,y0+data.textH,
+        fill="black")
+        
 
 def drawBoard(canvas,data):
     #draw basic background of the board, which can include pieces if locked in
@@ -812,7 +911,13 @@ def setupGardenMousePressed(event, data):
         data.boxFill = "grey"
         
 def simGardenMousePressed(event, data):
-    pass
+    clickRow = event.y/data.cellSize
+    clickCol = event.x/data.cellSize
+    for (row,col) in data.allWeeds:
+        distance = math.sqrt((clickRow-row)**2+(clickCol-col)**2)
+        if distance <= data.weedInfo[(row,col)]:
+            data.allWeeds.remove((row,col))
+            del data.weedInfo[(row,col)]
 
 
 def loginKeyPressed(event,data):
@@ -840,27 +945,26 @@ def setupGardenKeyPressed(event, data):
             data.month+= event.char
             calcWeatherProb(data)
     
-    
 def simGardenKeyPressed(event, data):
     if event.char =="p": data.paused = not data.paused
     if event.char =="q":
         data.mode = "setupGarden"
 
 def setupGardenTimerFired(data):
-    data.timerCalled+=1 
+    pass
 
 def simGardenTimerFired(data):
-    if data.simEnd or not data.simRunning: return 
+    if data.simEnd or not data.simRunning: checkResults(data)
     data.timerCalled+=1
     moveRain(data)
     spazzBug(data)
     calcWeeds(data)
-    if random.randint(0,100) <= data.bugSpawnProb:
-        spawnBug(data)
     if data.timerCalled%data.growthTime==0:
         updatePlants(data)
     if data.timerCalled%data.spawnTime == 0:
+        spawnBug(data)
         spreadBugs(data)
+        spawnWeed(data)
         spreadInfection(data)
     if data.timerCalled%data.weatherTime == 0:
         randomWeather(data)
@@ -898,6 +1002,7 @@ def simGardenRedrawAll(canvas,data):
     drawRainDrops(canvas,data)
     drawBugs(canvas,data)
     drawText(canvas,data,1,data.cols/2,"Bug Prob:%.2f"%data.bugSpawnProb)
+    drawText(canvas,data,2,data.cols/2,"Weed Prob:%.2f"%data.weedSpawnProb)
     if data.simEnd:
         drawLeaderBoard(canvas,data)
         
