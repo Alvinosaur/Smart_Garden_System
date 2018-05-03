@@ -12,14 +12,12 @@ from tkinter import *
 import os
 from scipy.stats import norm
 import random
-import matplotlib
-matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-from matplotlib.figure import Figure
+# import matplotlib
+# matplotlib.use("TkAgg")
+# from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+# from matplotlib.figure import Figure
 import math
 import string
-
-
 
 ####################################################################################
 ################################## InitFunctions ###################################
@@ -47,6 +45,7 @@ def init(data):
     data.invalidFlag = False
     data.bombSelected = False
     data.bombPlantNeg = False
+    data.showDistFlag = False
 
 def initStorages(data):
     data.controlVals = dict()
@@ -61,8 +60,12 @@ def initStorages(data):
     data.bugLocs = []
     data.allWeeds = set()
     data.spreadedPlants = []
+    data.rowValues = []
+    data.colValues = []
     data.weedInfo = dict()
     data.allUsernames = dict()
+    data.finalFilter = set()
+    data.allBugPlants = set()
     data.optimalFactors = [80,70,45]
     data.optimalSizes = [0]
     data.infectedPlants = []
@@ -74,7 +77,8 @@ def initStorages(data):
     data.weedFactorWeights = [.2,.4,.4]
     data.monthBoxLoc = (8, data.cols//2)
     bombRow,bombCol = data.bombSelectLoc
-    data.sliderLocs = [(data.buttonH,data.buttonX),(data.buttonH*2,data.buttonX),(data.buttonH*3,data.buttonX),(bombRow-data.bombRadius,bombCol)]
+    data.sliderLocs = [(data.buttonH,data.buttonX),(data.buttonH*2,data.buttonX),       
+        (data.buttonH*3,data.buttonX),(bombRow-data.bombRadius,bombCol)]
     
 def initGlobals(data): #this information doesn't get wiped each level
     data.allScores = set()
@@ -89,7 +93,7 @@ def initGlobals(data): #this information doesn't get wiped each level
 def initUI(data):
     data.rows = data.cols = 100
     data.timerCalled = 0
-    data.baseGrowthRate = 0
+    data.baseGrowthRate = 5
     data.bombRadius = 5
     data.bugSpawnProb = 0
     data.weedSpawnProb = 0
@@ -103,7 +107,7 @@ def initUI(data):
     data.spawnTime = 5
     data.optGrowth = 0
     data.plantCount = 0
-    data.bombSelectLoc = (data.rows/4, data.cols*3/4)
+    data.bombSelectLoc = (data.rows/2, data.cols/2+data.cols/8)
     data.buttonH = data.rows//30
     data.buttonL = data.buttonH*5
     data.sliderL = data.buttonH*8
@@ -190,8 +194,7 @@ def trackSliderBalls(data):
         if inc <=2:
             data.controlVals[(row,col)]=[data.userValues[inc],
                     data.valueTypes[inc]]
-        
-        
+                    
 def linReg(data):
     if data.simRunning: return
     for plant in data.plantSpecies:
@@ -285,7 +288,7 @@ def updatePlants(data):
                         change = infectChange(data)
                         rate -= change
             if (row,col) in data.collidingPlants:
-                rate -= 5 #idk about this
+                rate -= 2 #idk about this
             size += rate/data.timeFactor*data.currentLevel
             if size <= 0: size = 0
             sumGrowth+= size
@@ -337,14 +340,12 @@ def createPlant(event,data):
     else:
         row = event.y/data.cellSize
         col = event.x/data.cellSize
-        data.plantImages[data.selectedPlant].append((row,col,data.plantSize,0))
+        data.plantImages[data.selectedPlant].append((row,col,
+            data.plantSize,data.baseGrowthRate))
         data.allPlantSizes[data.selectedPlant][(row,col)]= [data.plantSize]
         data.plantLocs[data.selectedPlant].add((row,col))
         data.plantCount +=1
         calcInfectedProb(data)
-    
-def checkBounds(data,event):
-    pass
     
 def calcWeatherProb(data):
     month = int(data.month)
@@ -395,7 +396,8 @@ def moveRain(data):
     data.allDrops = newDrops
         
 def hotEvent(data):
-    data.background = "navajo white"
+    #data.background = "pink"
+    pass
     
 def brightEvent(data):
     data.bright=True
@@ -492,7 +494,8 @@ def checkInfected(data,plant,species):
     (curRow,curCol,curSize,curRate) = plant
     probInfect = data.infectProbs[(curRow,curCol)]
     if random.randint(0,100) <= probInfect*100:
-        if (plant,species,probInfect) not in data.infectedPlants:
+        if (curRow,curCol) not in data.allBugPlants:
+            data.allBugPlants.add((curRow,curCol))
             data.infectedPlants.append((plant,species,probInfect))
         
 def calcInfectedProb(data):
@@ -537,19 +540,14 @@ def spreadInfection(data):
                 distance = math.sqrt((curRow-row)**2+(curCol-col)**2)
                 weight = 1-probSpect(distance,data.plantDist[speciesType])
                 infectNewProb = (neighborProb*(1-weight))+(probInfect*weight)
-                
-                if random.randint(0,100) < infectNewProb*100:
-                    #row,col are bug's loc, store target loc in plant
-                    data.spreadedPlants.append((plant,newPlant,species,infectNewProb))
-                    #DEAL WITH data.infectedPlants's ((plant,species,probInfect))
-                    #How to deal with probInfect
-                    #Then deal with plant color and growth rate change from bug
-                    
-
-                    
+                if (row,col) not in data.allBugPlants:
+                    if random.randint(0,100) < infectNewProb*100:
+                        data.allBugPlants.add((row,col))
+                        #row,col are bug's loc, store target loc in plant
+                        data.spreadedPlants.append((plant,newPlant,species,infectNewProb))
+                        
 def spazzBug(data):
     for inc in range(len(data.bugLocs)):
-        #(row,col,bugLoc,species) = data.bugLocs[inc]
         (row,col,plant,infSpecies) = data.bugLocs[inc]
         #cx,cy are new possible location of bug
         plantRow,plantCol,oldSize,rate = plant
@@ -566,14 +564,20 @@ def spazzBug(data):
             newRow = cy/data.cellSize
             data.bugLocs[inc] = (newRow,newCol,plant,newPlantSpecies)
         
+def startGame(data):
+    if data.username == "":
+        data.noneEntered = True
+    else:
+        storeUsername(data)
+        calcWeatherProb(data)
+        data.boxFill = "white"
+        
 def newPosLegal(data,cx,cy,row,col,size):
     plantY = row*data.cellSize
     plantX = col*data.cellSize
     distance = math.sqrt((plantY-cy)**2+(plantX-cx)**2)
-    if distance < size:
-        return True
-    else: 
-        return False
+    if distance < size: return True
+    else: return False
     
 def probSpect(value,z,M = 1,k = .2):
     deno = 1+math.e**(-k*(value-z))
@@ -588,62 +592,78 @@ def getSpecies(data,row,col):
 def filterDistances(data):
     maxRate = 0
     maxSize = 0 
-    desired = set()
-    finalDesired = set()
+    initialFilter = set()
     filteredList = []
+    data.rowValues = []
+    data.colValues = []
     for speciesInc in range(len(data.plantSpecies)):
         species = data.plantSpecies[speciesInc]
-        for plantInc in range(len(data.plantImages[species])):
+        for plantInc in range(1,len(data.plantImages[species])):
             plant = data.plantImages[species][plantInc]
             row,col,size,rate = plant
-            rowValues.append(row)
-            colValues.append(col)
-            if rate > maxRate:
-                maxRate = rate
-                maxSize = size
-    rowDistances = getDistances(rowValues)
+            #store position
+            data.rowValues.append(row)
+            data.colValues.append(col)
+    #list of distances between all plants
+    if len(data.rowValues)<2: return
+    rowDistances = getDistances(data.rowValues)
     for inc in range(len(rowDistances)):
-        if rowDistances[inc] <= maxRate*data.endTime/data.growthTime*2:
-            firstInc = inc//(len(rowValues)-1)
-            secInc = inc%(len(rowValues)-1) + firstInc+1
-            desired.add((firstInc,secInc))
-    for firstInc,secInc in desired:
-        distance = abs(colValues[firstInc]-colValues[secInc])
-        if distance <= maxRate*data.endTime/data.growthTime*2+maxSize:
-            finalDesired.add((firstInc,secInc,distance))
-            
-# def checkDistances(data):
-#     for (firstInc,secInc,distance) in finalDesired:
-#         firstRow, firstCol = rowValues[firstInc],colValues[firstInc]
-#         secRow, secCol = rowValues[secInc],colValues[secInc]
-#         if ((firstRow,firstCol) in collidingPlants) and\
-#             ((secRow,secCol) in collidingPlants): continue
-#         firstSpecies = getSpecies(data,firstRow,firstCol)
-#         secondSpecies = getSpecies(data,secRow,secCol)
-#         for (row,col,size,rate) in data.plantImages[firstSpecies]:
-#             if firstRow == row and firstCol == col:
-#                 firstSize = size
-#         for (row,col,size,rate) in data.plantImages[secondSpecies]:
-#             if secRow == row and secCol == col:
-#                 secSize = size
-#         distance = math.sqrt((secRow-firstRow)**2+(secCol-firstCol)**2)
-#         if distance <= firstSize + secSize:
-#             collidingPlants.add((firstRow,firstCol))
-#             collidingPlants.add((secRow,secCol))
-#     
-# def getDistances(plantList):
-#     if len(plantList) == 2:
-#         return [plantList[0]-plantList[1]]
-#     else:
-#         firstElem = plantList[0]
-#         for inc in range(1,len(plantList)):
-#             result += [abs(firstElem-plantList[inc])]
-#         result += getDistances(plantList[1:])
-#         return result
+        maxSize = data.plantSize*2
+        if rowDistances[inc] <= maxSize:
+            firstInc,secInc = calcIndexes(inc,data.rowValues)
+            initialFilter.add((firstInc,secInc))
+    for firstInc,secInc in initialFilter:
+        distance = abs(data.colValues[firstInc]-data.colValues[secInc])
+        if distance <= maxSize:
+            data.finalFilter.add((firstInc,secInc,distance))
+def getDistances(plantList):
+    result = []
+    if len(plantList)<2:
+        return []
+    elif len(plantList) == 2:
+        return [abs(plantList[0]-plantList[1])]
+    else:
+        firstElem = plantList[0]
+        for inc in range(1,len(plantList)):
+            result += [abs(firstElem-plantList[inc])]
+        result += getDistances(plantList[1:])
+        return result
+
+def calcIndexes(inc,rowValues):
+    lengthRow = len(rowValues)-1
+    curPos = 0
+    curRow = 0
+    curCol = 0
+    while curPos + lengthRow <= inc:
+        curPos += lengthRow
+        curRow += 1
+        lengthRow -= 1
+    curCol = 1+inc-curPos+curRow
+    return curRow,curCol
+    
+def checkDistances(data):
+    for (firstInc,secInc,distance) in data.finalFilter:
+        firstRow, firstCol = data.rowValues[firstInc],data.colValues[firstInc]
+        secRow, secCol = data.rowValues[secInc],data.colValues[secInc]
+        if ((firstRow,firstCol) in data.collidingPlants) and\
+            ((secRow,secCol) in data.collidingPlants): continue
+        firstSpecies = getSpecies(data,firstRow,firstCol)
+        secondSpecies = getSpecies(data,secRow,secCol)
+        for (row,col,size,rate) in data.plantImages[firstSpecies]:
+            if firstRow == row and firstCol == col:
+                firstSize = size
+        for (row,col,size,rate) in data.plantImages[secondSpecies]:
+            if secRow == row and secCol == col:
+                secSize = size
+        distance = math.sqrt((secRow-firstRow)**2+(secCol-firstCol)**2)
+        if distance <= firstSize + secSize:
+            data.collidingPlants.add((firstRow,firstCol))
+            data.collidingPlants.add((secRow,secCol))
     
 def checkResults(data):
-    if data.totalScore > 5:
-        pass
+    if data.totalScore > 5*data.currentLevel:
+        data.currentLevel+=1
+        init(data)                                                        
         #move on to next level
     
 def endGame(data):
@@ -661,6 +681,7 @@ def spreadBugs(data):
         curRow,curCol,size,rate = infPlant
         newRow,newCol,newSize,newRate = newPlant
         newPlantSpecies = getSpecies(data,newRow,newCol)
+        #recalculate newSize since need most current value
         newSize = data.allPlantSizes[newPlantSpecies][(newRow,newCol)][-1]
         distanceY = curRow - newRow
         distanceX = curCol - newCol
@@ -706,6 +727,7 @@ def drawWeeds(canvas,data):
         size = data.weedInfo[(row,col)]
         cy = row*data.cellSize
         cx = col*data.cellSize
+        print(cx,cy)
         canvas.create_oval(cx-size,cy-size,cx+size,cy+size,fill="purple")
 
 def drawSlider(canvas,data,slider):
@@ -726,7 +748,7 @@ def drawSlider(canvas,data,slider):
 def drawLeaderBoard(canvas,data):
     canvas.create_rectangle(data.width/4,data.height/4,data.width*3/4,
                 data.height*3/4,fill=data.colors["leaderBoard"])
-    drawText(canvas,data,data.rows/4,data.cols/2,"Leaderboard:",fill="white")
+    drawText(canvas,data,data.rows/4+2,data.cols/2,"Leaderboard:",fill="white")
     scores = sorted(list(data.allScores))
     names = ""
     count = 0
@@ -762,7 +784,6 @@ def spawnBug(data):
         if data.timerCalled%20==0:
             for plant,species,probInfect in data.infectedPlants:
                 (row,col,size,rate) = plant
-                # data.bugLocs.append((row,col,(row,col),species))
                 data.bugLocs.append((row,col,plant,species))
     
 def drawBugs(canvas,data):
@@ -780,17 +801,22 @@ def drawBugs(canvas,data):
         cx = col*data.cellSize
         cy = row*data.cellSize
         r = data.cellSize/2
-        canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill="red")   
+        canvas.create_oval(cx-r,cy-r,cx+r,cy+r,fill=data.colors["bug"])   
 
 def drawTextAndBut(canvas,data):
+    drawText(canvas,data,1,data.cols/2,"Current Level: %d"%data.currentLevel)
+    boxRow,boxCol = data.loginBoxLoc
+    drawEntryBox(canvas,data,boxRow,boxCol,data.buttonL)
+    drawText(canvas,data,boxRow,boxCol,str(data.month))
+    if data.showDistFlag:
+        drawDistances(canvas,data)
+    drawText(canvas,data,boxRow-2.75,boxCol,"Current Month")
     createButton(canvas,data,data.runButLoc,"Run Simulation")
     drawText(canvas,data,1,data.cols/4,"Test Your Knowledge of Plants")
     drawText(canvas,data,3,data.cols/4,
             "by Choosing the Optimal Growth Parameters!")
     temp, bright, moist = list(data.controlVals.values())
     drawText(canvas,data,1,data.cols*3/4,"Temperature: %d Brightness: %d Moisture: %d"%(temp[0],bright[0],moist[0]))
-    drawText(canvas,data,data.rows/2,data.cols*3/4,
-            "Press 'd' to delete last plant")
     
     drawText(canvas,data,5,data.cols/4,
             "Hot Weather Probability:%.2f"%data.weatherProbs[0])
@@ -830,7 +856,7 @@ def drawBomb(canvas,data):
             canvas.create_oval(x0-size,y0-size,x0+size,y0+size,fill="black")
             if inc != 0: #don't have the first table bomb explode
                 timer = int(data.timerCalled-startTime)
-                drawText(row,col,str(timer),fill="yellow")
+                drawText(canvas,data,row,col,str(timer),fill="yellow")
         elif state == "Explode":
             canvas.create_oval(x0-size,y0-size,x0+size,y0+size,fill="orange")
         elif state == "Dead":
@@ -868,7 +894,31 @@ def updateBombs(data):
             state = "Dead"
         if data.simEnd: state = "Dead"
         data.bombList[inc] = (row,col,size,startTime,state,level)
+           
+def drawHelpPage1(canvas,data):
+    drawText(canvas,data,startRow,data.cols/4+data.cols,
+            "Instructions:")
+    drawText(canvas,data,startRow+2,data.cols/4+data.cols,
+            data.instructions)
+def drawHelpPage3(canvas,data):
+    startRow = data.rows/4
+    drawText(canvas,data,startRow,data.cols/4+data.cols,
+            "List of Commands:")
+    drawText(canvas,data,startRow+2,data.cols/4+data.cols,
+            "Press 'd' to delete last plant")
+    drawText(canvas,data,startRow+4,data.cols/4+data.cols,
+            "Press 'p' to pause game")
+    drawText(canvas,data,startRow+6,data.cols/4+data.cols,
+            "Press 'q' to restart")
             
+def drawDistances(canvas,data):
+    print(data.finalFilter)
+    for firstInc,secInc,distance in data.finalFilter:
+        row0, row1 = data.rowValues[firstInc],data.rowValues[secInc]
+        col0, col1 = data.colValues[firstInc],data.colValues[secInc]
+        y0,y1 = row0*data.cellSize,row1*data.cellSize
+        x0,x1 = col0*data.cellSize,col1*data.cellSize
+        canvas.create_line(x0,y0,x1,y1,fill="red")
 
 def drawBoard(canvas,data):
     #draw basic background of the board, which can include pieces if locked in
@@ -961,12 +1011,7 @@ def loginMousePressed(event,data):
     x0,y0,x1,y1 = calcBoxDimen(data,boxRow+4,boxCol-data.buttonL/2,
         data.buttonL,data.buttonH)
     if (x0<event.x<x1) and (y0<event.y<y1):
-        if data.username == "":
-            data.noneEntered = True
-        else:
-            storeUsername(data)
-            calcWeatherProb(data)
-            data.boxFill = "white"
+        startGame(data)
             
     
 def setupGardenMousePressed(event, data):
@@ -986,6 +1031,7 @@ def setupGardenMousePressed(event, data):
     if data.selectedPlant != "":
         if clickGarden(event,data):
             createPlant(event,data)
+            filterDistances(data)
     boxRow, boxCol = data.loginBoxLoc
     cx = boxCol*data.cellSize
     cy = boxRow*data.cellSize
@@ -1012,10 +1058,14 @@ def loginKeyPressed(event,data):
     data.noneEntered = False
     data.userRepeatFlag = False
     data.invalidFlag = False
+    if event.keysym == "Return":
+        startGame(data)
     if data.loginBoxSelected:
         if event.keysym == "BackSpace":
             data.username = data.username[:-1]
-        elif (event.char == ",") or (event.char == ";"):
+        elif (event.char == ",") or \
+             (event.char == ";") or \
+             (event.char not in string.printable):
             data.invalidFlag = True
             data.username = data.username[:-1]
         else:
@@ -1024,14 +1074,20 @@ def loginKeyPressed(event,data):
 def setupGardenKeyPressed(event, data):
     if event.keysym == 'Escape':
         data.selectedPlant = ""
-    elif data.monthSelected:
+    if event.char == "s":
+        data.showDistFlag = not data.showDistFlag
+    if data.monthSelected:
         if event.keysym == "BackSpace":
             data.month = data.month[:-1]
-        elif event.char in string.ascii_letters:
-            return
-        else:
+        elif event.char in string.digits:
             data.month+= event.char
-            calcWeatherProb(data)
+            if 1<=int(data.month)<=12:
+                calcWeatherProb(data)
+            else: data.month = data.month[:-1]
+    elif event.char =="q":
+        init(data)
+        initGlobals(data)
+    
     
 def simGardenKeyPressed(event, data):
     if data.simEnd or not data.simRunning: return
@@ -1044,15 +1100,16 @@ def setupGardenTimerFired(data):
     pass
 
 def simGardenTimerFired(data):
+    data.timerCalled+=1
     if data.simEnd or not data.simRunning:
         checkResults(data)
         return
-    data.timerCalled+=1
     moveRain(data)
     spazzBug(data)
     calcWeeds(data)
     if data.timerCalled%data.growthTime==0:
         updatePlants(data)
+        checkDistances(data)
     if data.timerCalled%data.spawnTime == 0:
         spawnBug(data)
         spreadBugs(data)
@@ -1073,16 +1130,10 @@ def setupGardenRedrawAll(canvas, data):
     drawSlider(canvas,data,data.sliderLocs[0])
     drawSlider(canvas,data,data.sliderLocs[1])
     drawSlider(canvas,data,data.sliderLocs[2])
-    drawSlider(canvas,data,data.sliderLocs[3])
     drawCoreObjects(canvas,data)
     drawPlants(canvas,data)
     #instructions 
     drawTextAndBut(canvas,data)
-    boxRow,boxCol = data.loginBoxLoc
-    drawEntryBox(canvas,data,boxRow,boxCol,data.buttonL)
-    drawText(canvas,data,boxRow,boxCol,str(data.month))
-    drawText(canvas,data,boxRow-2.75,boxCol,"Current Month")
-    
     
 def simGardenRedrawAll(canvas,data):
     drawBoard(canvas,data)
@@ -1091,6 +1142,7 @@ def simGardenRedrawAll(canvas,data):
     drawRainDrops(canvas,data)
     drawBugs(canvas,data)
     drawBomb(canvas,data)
+    drawSlider(canvas,data,data.sliderLocs[3])
     drawText(canvas,data,1,data.cols/2,"Bug Prob:%.2f"%data.bugSpawnProb)
     drawText(canvas,data,3,data.cols/2,"Weed Prob:%.2f"%data.weedSpawnProb)
     if data.bombSelected:
@@ -1098,6 +1150,10 @@ def simGardenRedrawAll(canvas,data):
             "Bomb Selected! Click Out White Space to Negate",fill="red")
     if data.simEnd:
         drawLeaderBoard(canvas,data)
+        
+def helpScreenRedrawAll(canvas,data):
+    drawHelpPage1(canvas,data)
+    
         
     #for all the factors, if random weather == True: drawRain(canvas,data)
         
@@ -1174,9 +1230,8 @@ def run(width=300, height=300):
                             mousePressedWrapper(event, canvas, data))
     data.root.bind("<Key>", lambda event:
                             keyPressedWrapper(event, canvas, data))
-    data.root.bind("<B1-Motion>", lambda event: moveObjectsWrapper(canvas,data,event))
-    data.root.bind("<ButtonRelease-1>", lambda event: checkBounds(data,event))
-    
+    data.root.bind("<B1-Motion>", lambda event: moveObjectsWrapper(canvas,data,
+        event))
     timerFiredWrapper(canvas, data)
     # and launch the app
     data.root.mainloop()  # blocks until window is closed
