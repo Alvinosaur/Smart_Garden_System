@@ -3,7 +3,7 @@ Plant Simulator Garden: https://youtu.be/Z5dl22RhYLc
 
 To play, please follow the below instructions:
 
-1. Download the plant data folders. Make sure these are in the same directory as the file.  
+1. Download "Plant_Data". Make sure these are in the same directory as the file.  
 2. Download one file:
       plantGame.py
 3. Download homebrew by entering this into terminal:
