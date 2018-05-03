@@ -1,6 +1,8 @@
 Farming Simulator: https://youtu.be/Z5dl22RhYLc
-      Alvin Shek  
-      15-112 Term Project
+
+Alvin Shek  
+
+15-112 Term Project
 
 April 2018
 
