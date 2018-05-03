@@ -1,3 +1,4 @@
+All sources listed below
 Plant Simulator Garden: https://youtu.be/Z5dl22RhYLc
 
 To play, please follow the below instructions:
@@ -18,5 +19,9 @@ To play, please follow the below instructions:
 If you do not have an IDE(Integrated Development Environment):
 Download the Sublime IDE for your operating system: https://www.sublimetext.com/3
 
-
-
+Sources:
+15112 Website: http://www.cs.cmu.edu/~112/notes/notes-animations-demos.html
+      Tkinter animation and run() function
+      
+Linear Regression Tutorial with scikit: http://scikit-learn.org/stable/modules/linear_model.html
+      linReg(data) function 
