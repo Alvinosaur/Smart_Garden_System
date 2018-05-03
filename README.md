@@ -25,3 +25,4 @@ Sources:
       
 Linear Regression Tutorial with scikit: http://scikit-learn.org/stable/modules/linear_model.html
       linReg(data) function 
+ 
