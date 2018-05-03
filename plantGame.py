@@ -887,7 +887,17 @@ def createBomb(event,data):
     if data.bombSelected:
         row = event.y/data.cellSize
         col = event.x/data.cellSize
-        data.bombList.append((row,col,data.bombRadius,data.timerCalled,"Inactive",data.currentLevel))
+        radius = data.bombRadius
+        data.bombList.append((row,col,radius,data.timerCalled,"Inactive",data.currentLevel))
+        clearAreaWeeds(data,row,col,radius)
+        
+def clearAreaWeeds(data,bombRow,bombCol,bombSize):
+    for (row,col) in data.allWeeds:
+        distance = math.sqrt((row-bombRow)**2+(col-bombCol)**2)
+        if distance <= bombSize:
+            data.allWeeds.remove((row,col))
+            del data.weedInfo[(row,col)]
+            data.roundScore += 5
     
 def updateBombs(data):
     for inc in range(len(data.bombList)):
@@ -900,6 +910,7 @@ def updateBombs(data):
         if level < data.currentLevel:
             #don't need to update old bombs
             state = "Dead"
+        print(age)
         if 30<= age <= 50: #show explosion animation
             state = "Explode"
         elif age > 50:
@@ -1139,6 +1150,7 @@ def simGardenTimerFired(data):
     moveRain(data)
     spazzBug(data)
     calcWeeds(data)
+    updateBombs(data)
     if data.timerCalled%data.growthTime==0:
         updatePlants(data)
         checkDistances(data)
