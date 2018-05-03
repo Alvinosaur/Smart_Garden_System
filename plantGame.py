@@ -46,6 +46,7 @@ def init(data):
     data.bombSelected = False
     data.bombPlantNeg = False
     data.showDistFlag = False
+    data.seeStats = False
 
 def initStorages(data):
     data.controlVals = dict()
@@ -170,18 +171,25 @@ def initPlants(data):
 def setResistances(data):
     data.plantRes = dict()
     data.plantDist = dict()
+    data.plantOutputFactor = dict()
     data.plantRes["Kale"] = .2
     data.plantDist["Kale"] = 5
+    data.plantOutputFactor["Kale"] = 3
     data.plantRes["Strawberry"] = .6
     data.plantDist["Strawberry"] = 4
+    data.plantOutputFactor["Strawberry"] = 7
     data.plantRes["Pumpkin"] = .3
     data.plantDist["Pumpkin"] = 7
+    data.plantOutputFactor["Pumpkin"] = 4
     data.plantRes["Corn"] = .4
     data.plantDist["Corn"] = 7
+    data.plantOutputFactor["Corn"] = 5
     data.plantRes["Broccoli"] = .4
     data.plantDist["Broccoli"] = 6
+    data.plantOutputFactor["Broccoli"] = 5
     data.plantRes["Dill"] = 0
     data.plantDist["Dill"] = 5
+    data.plantOutputFactor["Dill"] = 1
     
 def trackSliderBalls(data):
     data.sliderBallLocs = dict()
@@ -191,7 +199,7 @@ def trackSliderBalls(data):
         cy = (row+data.sliderH/2)*data.cellSize
         #sliderBallLocs uses rows, cols for key, actual location for value
         data.sliderBallLocs[(row,col)]=(cx,cy)
-        if inc <=2:
+        if inc <= 2:
             data.controlVals[(row,col)]=[data.userValues[inc],
                     data.valueTypes[inc]]
                     
@@ -260,18 +268,21 @@ def selectPlants(event,data):
 def updateSlider(data,event):
     inc = 0
     for slider in data.sliderBallLocs:
-        inc+=1
         cx,cy = data.sliderBallLocs[slider]
         if checkSliderBounds(data,cx,cy,event,slider):
             difference = (event.x-cx)//(data.sliderL/2)
             if difference >0:
                 difference*=1.75
-            if inc <=0:
+            if inc <=2:
                 data.controlVals[slider][0] += difference
             else:
                 data.bombRadius += difference
+                row,col,size,startTime,state,level = data.bombList[inc]
+                size = data.bombRadius
+                data.bombList[inc] = row,col,size,startTime,state,level
             cx = event.x
             data.sliderBallLocs[slider] = (cx,cy)
+        inc+=1
 
 def updatePlants(data):
     sumGrowth = 0
@@ -286,9 +297,9 @@ def updatePlants(data):
                     (checkRow,checkCol,checkSize,checkRate) = values
                     if row == checkRow and col == checkCol:
                         change = infectChange(data)
-                        rate -= change
+                        size -= change
             if (row,col) in data.collidingPlants:
-                rate -= 2 #idk about this
+                size -= 2
             size += rate/data.timeFactor*data.currentLevel
             if size <= 0: size = 0
             sumGrowth+= size
@@ -301,7 +312,7 @@ def updatePlants(data):
 
 def infectChange(data):
     day = data.timerCalled//20
-    return math.e**(0.1*(day-15))
+    return math.e**(0.05*(day-15))
     
 def moveObjects(data,event):
     #these all have built-in checks for location
@@ -478,6 +489,7 @@ def spawnWeed(data):
         distance = math.sqrt((row-neighborRow)**2+(col-neighborCol)**2)
         neighborFactor = distanceDistrib.pdf(distance)*10
         baseProb += neighborFactor*100 #convert to percentage
+    print(baseProb)
     if random.randint(0,100) <= baseProb:
         data.allWeeds.add((row,col))
         data.weedInfo[(row,col)] = data.weedSize
@@ -651,10 +663,10 @@ def checkDistances(data):
         secondSpecies = getSpecies(data,secRow,secCol)
         for (row,col,size,rate) in data.plantImages[firstSpecies]:
             if firstRow == row and firstCol == col:
-                firstSize = size
+                firstSize = size/2
         for (row,col,size,rate) in data.plantImages[secondSpecies]:
             if secRow == row and secCol == col:
-                secSize = size
+                secSize = size/2
         distance = math.sqrt((secRow-firstRow)**2+(secCol-firstCol)**2)
         if distance <= firstSize + secSize:
             data.collidingPlants.add((firstRow,firstCol))
@@ -715,19 +727,18 @@ def drawPlants(canvas,data):
                 (row-size/2)*data.cellSize,(col+size/2)*data.cellSize,
                 (row+size/2)*data.cellSize,fill=color,
                 outline=data.colors[plant])
-            if inc >0: drawText(canvas,data,row+1,col,"%.1f"%size) 
+            if inc >0: drawText(canvas,data,row+1,col,"%.1f"%(size/2))
     for (row,col) in data.infectProbs:
         prob = data.infectProbs[(row,col)]
         drawText(canvas,data,row-1,col,"%.2f"%prob,fill="red")
     
 def drawWeeds(canvas,data):
     for weed in data.allWeeds:
-        print(data.allWeeds)
         (row,col) = weed
         size = data.weedInfo[(row,col)]
         cy = row*data.cellSize
         cx = col*data.cellSize
-        print(cx,cy)
+        print("weed",cx,cy)
         canvas.create_oval(cx-size,cy-size,cx+size,cy+size,fill="purple")
 
 def drawSlider(canvas,data,slider):
@@ -912,7 +923,6 @@ def drawHelpPage3(canvas,data):
             "Press 'q' to restart")
             
 def drawDistances(canvas,data):
-    print(data.finalFilter)
     for firstInc,secInc,distance in data.finalFilter:
         row0, row1 = data.rowValues[firstInc],data.rowValues[secInc]
         col0, col1 = data.colValues[firstInc],data.colValues[secInc]
@@ -942,6 +952,19 @@ def drawText(canvas,data,row,col,text,font="",fill="black"):
     if font == "": font = "Arial %d bold "%data.textH
     canvas.create_text(col*data.cellSize,row*data.cellSize,
                                                 text=text,font=font,fill = fill)
+         
+def showStats(canvas,data):
+    row,col,size,rate = data.plantImages[data.selectedPlant][0]
+    x0 = (col+data.buttonL)*data.cellSize
+    x1 = (col+data.buttonL)*data.cellSize
+    y0 = (row-data.buttonL)*data.cellSize
+    y1 = (row+data.buttonL)*data.cellSize
+    canvas.create_rectangle(x0,y0,x1,y1,fill="white")
+    suscept = data.plantRes[data.selectedPlant]
+    maxEndSize = data.plantSize+data.baseGrowthRate*data.endTime/data.growthTime
+    maxOutput = data.plantOutputFactor[data.selectedPlant]*maxEndSize
+    drawText(canvas,data,row,col,"Aphid Susceptibility: %.1f"%suscept)
+    drawText(canvas,data,row+2,col,"Max Possible Output: %d"%maxOutput)
          
 def showGraph(data):
     # fig = Figure(figsize=(5,5), dpi=100)
@@ -1072,9 +1095,12 @@ def loginKeyPressed(event,data):
             data.username+= event.char
 
 def setupGardenKeyPressed(event, data):
+    data.seeStats = True
     if event.keysym == 'Escape':
         data.selectedPlant = ""
     if event.char == "s":
+        if data.selectedPlant != "": 
+            data.seeStats = not data.seeStats
         data.showDistFlag = not data.showDistFlag
     if data.monthSelected:
         if event.keysym == "BackSpace":
@@ -1110,9 +1136,9 @@ def simGardenTimerFired(data):
     if data.timerCalled%data.growthTime==0:
         updatePlants(data)
         checkDistances(data)
+        spreadBugs(data)
     if data.timerCalled%data.spawnTime == 0:
         spawnBug(data)
-        spreadBugs(data)
         spawnWeed(data)
         spreadInfection(data)
     if data.timerCalled%data.weatherTime == 0:
@@ -1134,6 +1160,8 @@ def setupGardenRedrawAll(canvas, data):
     drawPlants(canvas,data)
     #instructions 
     drawTextAndBut(canvas,data)
+    if data.seeStats:
+        showStats(canvas,data)
     
 def simGardenRedrawAll(canvas,data):
     drawBoard(canvas,data)
@@ -1143,10 +1171,13 @@ def simGardenRedrawAll(canvas,data):
     drawBugs(canvas,data)
     drawBomb(canvas,data)
     drawSlider(canvas,data,data.sliderLocs[3])
-    drawText(canvas,data,1,data.cols/2,"Bug Prob:%.2f"%data.bugSpawnProb)
-    drawText(canvas,data,3,data.cols/2,"Weed Prob:%.2f"%data.weedSpawnProb)
+    difference = data.endTime - data.timerCalled
+    drawText(canvas,data,1,data.cols/2,"Time Left:%d"%difference)
+    drawText(canvas,data,3,data.cols/2,"Bug Prob:%.2f"%data.bugSpawnProb)
+    drawText(canvas,data,5,data.cols/2,"Weed Prob:%.2f"%data.weedSpawnProb)
+    
     if data.bombSelected:
-        drawText(canvas,data,3,data.cols/2,
+        drawText(canvas,data,7,data.cols/2,
             "Bomb Selected! Click Out White Space to Negate",fill="red")
     if data.simEnd:
         drawLeaderBoard(canvas,data)
