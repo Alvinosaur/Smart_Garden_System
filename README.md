@@ -1,7 +1,11 @@
+Plant Simulator Garden: https://drive.google.com/file/d/1y4aT1SPUd-Vwk_GRunY7M-RDs1hJOZL3/view
+
 Automated, Self-Learning Garden
 Alvin Shek
 15-112 Term Project
 April 2018
+
+
 
 Project Summary
 The Automated, Self-Learning Garden is an CNC-styled gardening system that can distinguish between crops and weeds using computer vision and machine learning. With sensors to monitor the environment and computer vision for plant growth, the system will learn the most optimal environmental factors and times for growing different plant species and provide this as advice to users. The garden will also incorporate data weekly forecasts and warn the user about days where proactive measures may be necessary to protect certain plants. 
