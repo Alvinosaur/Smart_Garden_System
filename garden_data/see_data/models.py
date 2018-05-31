@@ -13,6 +13,9 @@ class Species(models.Model):
 	optimal_moist = models.IntegerField(default=60)
 	optimal_heat = models.IntegerField(default=60)
 
+	def __str__(self):
+		return self.species
+
 class Plant(models.Model):
 	owner = models.ForeignKey(Owner,on_delete=models.CASCADE,null=True)
 	species = models.ForeignKey(Species,on_delete=models.CASCADE,null=True)

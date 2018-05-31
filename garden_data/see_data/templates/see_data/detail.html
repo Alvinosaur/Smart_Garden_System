@@ -1,1 +1,10 @@
-{{ plant }}
+<img src="{{ plant.image }}">
+
+<h1>{{ plant.species }}</h1>
+<h3>{{ plant.owner }}</h3>
+
+<u1>
+	{% for song in owner.plant_set.all %}
+	<li>Plant {{ plant.id }} planted on {{plant.start_date}} at ({{locX}},{{locY}})</li>
+	{% endfor %}
+</u1>
