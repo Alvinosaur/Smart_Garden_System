@@ -1,0 +1,10 @@
+<h1>List of Current Plants</h1>
+	{% if all_plants %}
+		<u1>
+			{% for plant in all_plants %}
+			<li><a href="/see_data/{{ plant.id }}/">{{ plant.species }}</a></li>
+			{% endfor %}
+		</u1>
+	{% else %}
+		<h3>You don't have this plant</h3>
+	{% endif %}
