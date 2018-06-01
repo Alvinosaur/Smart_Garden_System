@@ -1,10 +1,22 @@
 <img src="{{ plant.image }}">
 
-<h1>{{ plant.species }}</h1>
-<h3>{{ plant.owner }}</h3>
+<h1>Plant {{plant.id}}: {{ plant.species }}</h1>
+<h2>{{ plant.owner }}</h2>
 
-<u1>
-	{% for song in owner.plant_set.all %}
-	<li>Plant {{ plant.id }} planted on {{plant.start_date}} at ({{locX}},{{locY}})</li>
-	{% endfor %}
-</u1>
+<form action="{% url 'see_data:favorite' plant.id %}" method="post">
+	{% csrf_token %}
+	{% for indiv_plant in plant.owner.plant_set.all %}
+		<input type="radio" id="plant{{ forloop.counter }}" name="plant" value = "{{ indiv_plant.id }}" />
+		<label for="song{{ forloop.counter }}">
+			{{ indiv_plant.species }}
+			{% if indiv_plant.is_favorite %}
+				<img src = "http://pngimg.com/uploads/star/star_PNG41531.png"/>
+			{% endif %}
+		</label><br>
+		{% endfor %}
+		<input type="submit" value="favorite"/>
+</form>
+
+{% if error_message %}
+	<p><strong>{{ error_message }}</strong></p>
+{% endif %}

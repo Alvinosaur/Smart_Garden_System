@@ -27,6 +27,7 @@ class Plant(models.Model):
 	current_moist = models.IntegerField(default=50)
 	current_light = models.IntegerField(default=60)
 	current_heat = models.IntegerField(default=70)
+	is_favorite = models.BooleanField(default=False)
 	all_moist = [current_moist]
 	all_heat = [current_heat]
 	all_light = [current_light]
