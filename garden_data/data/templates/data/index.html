@@ -1,0 +1,22 @@
+<h1>{{ owner }}</h1>
+<img src="{{ owner.image }}">
+
+<h2>List of Owned Species</h2>
+
+<form action="{% url 'data:favorite' species.id %}" method="post">
+	{% csrf_token %}
+	{% for indiv_species in owner.species_set.all %}
+		<input type="radio" id="species{{ forloop.counter }}" name="species" value = "{{ indiv_species.id }}" />
+		<label for="species{{ forloop.counter }}">
+			{{ indiv_species }}
+			{% if indiv_species.is_favorite %}
+				<img src = "http://pngimg.com/uploads/star/star_PNG41531.png"/>
+			{% endif %}
+		</label><br>
+		{% endfor %}
+		<input type="submit" value="favorite"/>
+</form>
+
+{% if error_message %}
+	<p><strong>{{ error_message }}</strong></p>
+{% endif %}

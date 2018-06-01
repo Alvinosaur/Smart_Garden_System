@@ -1,0 +1,10 @@
+<img src="{{species.image}}">
+<h1>Select a Plant to View Its Stats</h1>
+		<u1>
+			{% for plant in species.plant_set.all %}
+			<li><a href="{% url 'data:sub_detail' plant.id %}">{{plant.species}} {{ plant.id }}</a></li>
+			{% endfor %}
+		</u1>
+	{% else %}
+		<h2>This plant does not exist.</h2>
+	{% endif %}
