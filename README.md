@@ -6,7 +6,7 @@ Alvin Shek
 
 April 2018
 
-# Project Summary
+# Project Summary:
 The Garden Simulator is a single-player game that reflects real-life problems surrounding modern agriculture. Often, environmental factors such as rain, heat, and brightness fluctuate throughout the year, confining conventional farmers to specific seasons with specific tasks. This game allows the user the to experiment with different months for growing as well as their idea of ideal environmental factors for plants. The game also features a mini-game of killing weeds either with manual clicking or with herbicides. 
 
 # Modules:
