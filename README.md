@@ -51,13 +51,17 @@ This entire document is my TP3 update! I chose to restart projects twice actuall
 2. Download one file:
       plantGame.py
 3. Download homebrew by entering this into terminal:
-      ```/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"```
+
+```/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"```
+
 4. Download pip by entering this into terminal:
-      brew install pip
+
+```brew install pip```
+
 5. Download packages:
-      brew install python numpy scipy
+```brew install python numpy scipy
       pip install -U scikit-learn
-      pip install pandas
+      pip install pandas```
 6. Run the game with your IDE!
 
 If you do not have an IDE(Integrated Development Environment):
