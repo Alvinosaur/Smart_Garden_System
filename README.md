@@ -59,9 +59,12 @@ This entire document is my TP3 update! I chose to restart projects twice actuall
 ```brew install pip```
 
 5. Download packages:
-```brew install python numpy scipy
-      pip install -U scikit-learn
-      pip install pandas```
+```brew install python numpy scipy```
+
+```pip install -U scikit-learn```
+      
+```pip install pandas```
+
 6. Run the game with your IDE!
 
 If you do not have an IDE(Integrated Development Environment):
