@@ -1,8 +1,8 @@
-# Farming Simulator: https://youtu.be/0gHhN09BUe0
+# Strategy-Based Farming Game:
 
 Alvin Shek  
 
-15-112 Term Project
+15-112 Term Project, video: https://youtu.be/0gHhN09BUe0
 
 April 2018
 
@@ -44,7 +44,6 @@ https://github.com/Alvinosaur
 # Updates:
 This entire document is my TP3 update! I chose to restart projects twice actually. I wasn’t able to collect depth values of specific joints with the microsoft kinect. I also wasn’t able to make a functioning neural network for predicting variables-- mine instead only could be used for probability classification. Although my project didn’t meet my initial dreams, I am more than pleased with my persistence in working, even after two grueling failures. To put this situation into perspective, 15112 students are expected to finish “TP2” or a minimum viable product by the week before the project is due. I was just moving on from the neural network at this point and had to create a completely new project within a week with papers and two final exams
 
-####################################################################################################
 
 # To play, please follow the below instructions:
 
