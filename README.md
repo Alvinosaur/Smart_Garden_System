@@ -51,7 +51,7 @@ This entire document is my TP3 update! I chose to restart projects twice actuall
 2. Download one file:
       plantGame.py
 3. Download homebrew by entering this into terminal:
-      /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      ```/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"```
 4. Download pip by entering this into terminal:
       brew install pip
 5. Download packages:
